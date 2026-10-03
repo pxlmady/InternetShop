@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InternetShop — DDD demo</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>InternetShop</h1>
+  <p>Практична робота №1 · Clean Architecture та DDD · контексти <b>Catalog</b> і <b>Ordering</b></p>
+</header>
+
+<main>
+  <section>
+    <h2>Catalog — товари</h2>
+    <table>
+      <thead><tr><th>Назва</th><th>Опис</th><th>Ціна, грн</th><th>Id</th><th></th></tr></thead>
+      <tbody id="products"></tbody>
+    </table>
+    <form id="product-form">
+      <input name="name" placeholder="Назва" required>
+      <input name="description" placeholder="Опис">
+      <input name="price" placeholder="Ціна" inputmode="decimal" required>
+      <button type="submit">Додати товар</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Ordering — замовлення</h2>
+    <p class="muted">Покупець (CustomerId): <code id="customer"></code></p>
+    <button id="new-order">Створити замовлення</button>
+    <div id="orders"></div>
+  </section>
+
+  <div id="message" role="status"></div>
+</main>
+
+<footer>
+  JSON API: <a href="/products">/products</a> · <a href="/orders">/orders</a>
+</footer>
+<script src="/app.js"></script>
+</body>
+</html>

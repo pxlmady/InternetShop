@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.internetshop</groupId>
+        <artifactId>internetshop</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <!-- WebApi: HTTP, JSON і точка складання (Composition Root). Зовнішній шар, знає про всі інші. -->
+    <artifactId>internetshop-webapi</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.internetshop</groupId>
+            <artifactId>internetshop-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.internetshop</groupId>
+            <artifactId>internetshop-infrastructure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.internetshop</groupId>
+            <artifactId>internetshop-domain</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- mvn package створює target/internetshop.jar з усіма модулями: java -jar internetshop-webapi/target/internetshop.jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <finalName>internetshop</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.internetshop.webapi.Main</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>executable-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

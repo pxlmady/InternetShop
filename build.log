@@ -1,0 +1,569 @@
+[IJ]-3-ProjectDiscoveryStarted-[IJ]-id=unknown
+[[1;34mINFO[m] Scanning for projects...
+[IJ]-3-SessionStarted-[IJ]-id=com.internetshop:internetshop:pom:1.0.0-[IJ]-projects=com.internetshop:internetshop:1.0.0&&com.internetshop:internetshop-domain:1.0.0&&com.internetshop:internetshop-application:1.0.0&&com.internetshop:internetshop-infrastructure:1.0.0&&com.internetshop:internetshop-webapi:1.0.0&&com.internetshop:internetshop-checks:1.0.0&&
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1mReactor Build Order:[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] InternetShop                                                       [pom]
+[[1;34mINFO[m] internetshop-domain                                                [jar]
+[[1;34mINFO[m] internetshop-application                                           [jar]
+[[1;34mINFO[m] internetshop-infrastructure                                        [jar]
+[[1;34mINFO[m] internetshop-webapi                                                [jar]
+[[1;34mINFO[m] internetshop-checks                                                [jar]
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop:pom:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m-------------------< [0;36mcom.internetshop:internetshop[0;1m >--------------------[m
+[[1;34mINFO[m] [1mBuilding InternetShop 1.0.0                                        [1/6][m
+[[1;34mINFO[m]   from pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ pom ]---------------------------------[m
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop:pom:1.0.0
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m----------------< [0;36mcom.internetshop:internetshop-domain[0;1m >----------------[m
+[[1;34mINFO[m] [1mBuilding internetshop-domain 1.0.0                                 [2/6][m
+[[1;34mINFO[m]   from internetshop-domain\pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-resources-plugin:pom:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-plugins:pom:39-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:39-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:29-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-resources-plugin:jar:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-compiler-plugin:pom:3.13.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-plugins:pom:41-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:41-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:31-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-compiler-plugin:jar:3.13.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-surefire-plugin:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.9.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-surefire-plugin:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-jar-plugin:pom:3.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-plugins:pom:42-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:42-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:32-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.10.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-jar-plugin:jar:3.4.1-[IJ]-error=
+[IJ]-3-DependencyResolutionRequest-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0
+[IJ]-3-DependencyResolutionResult-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:resources[m [1m(default-resources)[m @ [36minternetshop-domain[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-resources-plugin:pom:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:pom:1.26-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:5.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:pom:3.5.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:10-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-filtering:pom:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:39-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.inject:javax.inject:pom:1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-api:pom:1.7.36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-parent:pom:1.7.36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.plexus:plexus-build-api:pom:0.0.7-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.spice:spice-parent:pom:15-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.forge:forge-parent:pom:5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:pom:3.5.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:pom:2.11.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:52-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:23-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.7.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-lang3:pom:3.12.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.7.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-resources-plugin:jar:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:jar:1.26-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:jar:3.5.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-filtering:jar:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.inject:javax.inject:jar:1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-api:jar:1.7.36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.plexus:plexus-build-api:jar:0.0.7-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:jar:2.11.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-lang3:jar:3.12.0-[IJ]-error=
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-domain\src\main\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:compile[m [1m(default-compile)[m @ [36minternetshop-domain[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-compiler-plugin:pom:3.13.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-utils:pom:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-incremental:pom:1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:19-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:23-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:13-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-java:pom:1.2.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-languages:pom:1.2.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:15-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.10.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.ow2.asm:asm:pom:9.6-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.ow2:ow2:pom:1.5.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.thoughtworks.qdox:qdox:pom:2.0.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.oss:oss-parent:pom:9-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-api:pom:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler:pom:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:17-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:pom:4.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:13-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-manager:pom:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-xml:pom:3.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-javac:pom:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compilers:pom:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-compiler-plugin:jar:3.13.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-utils:jar:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-api:jar:1.7.36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:jar:2.11.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-incremental:jar:1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-java:jar:1.2.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.ow2.asm:asm:jar:9.6-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.thoughtworks.qdox:qdox:jar:2.0.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-api:jar:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-manager:jar:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.inject:javax.inject:jar:1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-xml:jar:3.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-compiler-javac:jar:2.15.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:jar:4.0.0-[IJ]-error=
+[[1;34mINFO[m] Nothing to compile - all classes are up to date.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:testResources[m [1m(default-testResources)[m @ [36minternetshop-domain[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-domain\src\test\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:testCompile[m [1m(default-testCompile)[m @ [36minternetshop-domain[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32msurefire:3.2.5:test[m [1m(default-test)[m @ [36minternetshop-domain[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-surefire-plugin:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:maven-surefire-common:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-api:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-logger-api:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-shared-utils:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-extensions-api:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-booter:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-extensions-spi:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-util:pom:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether:pom:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-api:pom:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-common-artifact-filters:pom:3.1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:34-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:34-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-artifact:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:25-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:15-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-core:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-settings:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-settings-builder:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:pom:1.21-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-components:pom:1.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:3.3.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.spice:spice-parent:pom:17-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.forge:forge-parent:pom:10-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-component-annotations:pom:1.5.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-containers:pom:1.5.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:2.0.7-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.plexus:plexus-sec-dispatcher:pom:1.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.spice:spice-parent:pom:12-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.forge:forge-parent:pom:4-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.plexus:plexus-cipher:pom:1.4-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-repository-metadata:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-plugin-api:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.sisu:org.eclipse.sisu.plexus:pom:0.9.0.M2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.sisu:sisu-plexus:pom:0.9.0.M2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.annotation:javax.annotation-api:pom:1.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=net.java:jvnet-parent:pom:3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.enterprise:cdi-api:pom:1.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.jboss.weld:weld-parent:pom:26-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.sisu:org.eclipse.sisu.inject:pom:0.9.0.M2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.sisu:sisu-inject:pom:0.9.0.M2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-component-annotations:pom:2.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-containers:pom:2.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-classworlds:pom:2.6.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-model-builder:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-aether-provider:pom:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-spi:pom:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-impl:pom:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.sisu:sisu-guice:pom:3.2.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.sisu.inject:guice-parent:pom:3.2.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.forge:forge-parent:pom:38-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=aopalliance:aopalliance:pom:1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.google.guava:guava:pom:16.0.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.google.guava:guava-parent:pom:16.0.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.oss:oss-parent:pom:7-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-classworlds:pom:2.5.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:pom:2.15.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:65-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.10.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-surefire-plugin:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:maven-surefire-common:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-api:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-logger-api:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-extensions-api:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-booter:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-extensions-spi:jar:3.2.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-util:jar:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.eclipse.aether:aether-api:jar:1.0.0.v20140518-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-common-artifact-filters:jar:3.1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:jar:2.15.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-java:jar:1.2.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.ow2.asm:asm:jar:9.6-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.thoughtworks.qdox:qdox:jar:2.0.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.surefire:surefire-shared-utils:jar:3.2.5-[IJ]-error=
+[[1;34mINFO[m] No tests to run.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mjar:3.4.1:jar[m [1m(default-jar)[m @ [36minternetshop-domain[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-jar-plugin:pom:3.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:file-management:pom:3.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:26-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:pom:4.0.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:pom:2.16.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:69-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-archiver:pom:3.6.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:41-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-archiver:pom:4.9.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-io:pom:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:16-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-compress:pom:1.26.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:66-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-codec:commons-codec:pom:1.16.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-lang3:pom:3.14.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:64-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:30-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.iq80.snappy:snappy:pom:0.4-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.tukaani:xz:pom:1.9-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.github.luben:zstd-jni:pom:1.5.5-11-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:pom:1.27-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-jar-plugin:jar:3.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:file-management:jar:3.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:jar:2.16.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-archiver:jar:3.6.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:jar:1.27-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:jar:4.0.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-archiver:jar:4.9.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-io:jar:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-compress:jar:1.26.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-lang3:jar:3.14.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-codec:commons-codec:jar:1.16.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.iq80.snappy:snappy:jar:0.4-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.tukaani:xz:jar:1.9-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.github.luben:zstd-jni:jar:1.5.5-11-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.inject:javax.inject:jar:1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-api:jar:1.7.36-[IJ]-error=
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop-domain:jar:1.0.0
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m-------------< [0;36mcom.internetshop:internetshop-application[0;1m >--------------[m
+[[1;34mINFO[m] [1mBuilding internetshop-application 1.0.0                            [3/6][m
+[[1;34mINFO[m]   from internetshop-application\pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[IJ]-3-DependencyResolutionRequest-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-DependencyResolutionResult-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:resources[m [1m(default-resources)[m @ [36minternetshop-application[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-application\src\main\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:compile[m [1m(default-compile)[m @ [36minternetshop-application[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:testResources[m [1m(default-testResources)[m @ [36minternetshop-application[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-application\src\test\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:testCompile[m [1m(default-testCompile)[m @ [36minternetshop-application[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32msurefire:3.2.5:test[m [1m(default-test)[m @ [36minternetshop-application[0;1m ---[m
+[[1;34mINFO[m] No tests to run.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mjar:3.4.1:jar[m [1m(default-jar)[m @ [36minternetshop-application[0;1m ---[m
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop-application:jar:1.0.0
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m------------< [0;36mcom.internetshop:internetshop-infrastructure[0;1m >------------[m
+[[1;34mINFO[m] [1mBuilding internetshop-infrastructure 1.0.0                         [4/6][m
+[[1;34mINFO[m]   from internetshop-infrastructure\pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[IJ]-3-DependencyResolutionRequest-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-DependencyResolutionResult-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:resources[m [1m(default-resources)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-infrastructure\src\main\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:compile[m [1m(default-compile)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:testResources[m [1m(default-testResources)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-infrastructure\src\test\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:testCompile[m [1m(default-testCompile)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32msurefire:3.2.5:test[m [1m(default-test)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[[1;34mINFO[m] No tests to run.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mjar:3.4.1:jar[m [1m(default-jar)[m @ [36minternetshop-infrastructure[0;1m ---[m
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop-infrastructure:jar:1.0.0
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m----------------< [0;36mcom.internetshop:internetshop-webapi[0;1m >----------------[m
+[[1;34mINFO[m] [1mBuilding internetshop-webapi 1.0.0                                 [5/6][m
+[[1;34mINFO[m]   from internetshop-webapi\pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-assembly-plugin:pom:3.7.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-assembly-plugin:jar:3.7.1-[IJ]-error=
+[IJ]-3-DependencyResolutionRequest-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-infrastructure:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-DependencyResolutionResult-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:resources[m [1m(default-resources)[m @ [36minternetshop-webapi[0;1m ---[m
+[[1;34mINFO[m] Copying 3 resources from src\main\resources to target\classes
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:compile[m [1m(default-compile)[m @ [36minternetshop-webapi[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:testResources[m [1m(default-testResources)[m @ [36minternetshop-webapi[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-webapi\src\test\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:testCompile[m [1m(default-testCompile)[m @ [36minternetshop-webapi[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32msurefire:3.2.5:test[m [1m(default-test)[m @ [36minternetshop-webapi[0;1m ---[m
+[[1;34mINFO[m] No tests to run.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mjar:3.4.1:jar[m [1m(default-jar)[m @ [36minternetshop-webapi[0;1m ---[m
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=single-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32massembly:3.7.1:single[m [1m(executable-jar)[m @ [36minternetshop-webapi[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-assembly-plugin:pom:3.7.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.resolver:maven-resolver-util:pom:1.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.resolver:maven-resolver:pom:1.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:33-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:21-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.resolver:maven-resolver-api:pom:1.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-common-artifact-filters:pom:3.3.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:37-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:37-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache:apache:pom:27-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-filtering:pom:3.3.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-archiver:pom:3.6.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-shared-components:pom:40-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-parent:pom:40-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-archiver:pom:4.8.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:14-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-io:pom:3.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:pom:2.13.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:58-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-compress:pom:1.23.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:56-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.9.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.github.luben:zstd-jni:pom:1.5.5-5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.plugins:maven-assembly-plugin:jar:3.7.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.resolver:maven-resolver-util:jar:1.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.resolver:maven-resolver-api:jar:1.4.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-common-artifact-filters:jar:3.3.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.slf4j:slf4j-api:jar:1.7.36-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-interpolation:jar:1.27-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-io:commons-io:jar:2.15.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven.shared:maven-filtering:jar:3.3.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=javax.inject:javax.inject:jar:1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.sonatype.plexus:plexus-build-api:jar:0.0.7-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-lang3:jar:3.14.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-io:jar:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-archiver:jar:4.9.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-compress:jar:1.26.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=commons-codec:commons-codec:jar:1.16.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.iq80.snappy:snappy:jar:0.4-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.tukaani:xz:jar:1.9-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.github.luben:zstd-jni:jar:1.5.5-11-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.maven:maven-archiver:jar:3.6.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:jar:4.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-xml:jar:3.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-infrastructure:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-webapi:pom:1.0.0-[IJ]-error=
+[[1;34mINFO[m] Building jar: D:\duikt\apz\InternetShop\internetshop-webapi\target\internetshop.jar
+[[1;33mWARNING[m] Configuration option 'appendAssemblyId' is set to false.
+Instead of attaching the assembly file: D:\duikt\apz\InternetShop\internetshop-webapi\target\internetshop.jar, it will become the file for main project artifact.
+NOTE: If multiple descriptors or descriptor-formats are provided for this project, the value of this file will be non-deterministic!
+[[1;33mWARNING[m] Replacing pre-existing project main-artifact file: D:\duikt\apz\InternetShop\internetshop-webapi\target\internetshop-webapi-1.0.0.jar
+with assembly file: D:\duikt\apz\InternetShop\internetshop-webapi\target\internetshop.jar
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=single-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop-webapi:jar:1.0.0
+[IJ]-3-ProjectStarted-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m----------------< [0;36mcom.internetshop:internetshop-checks[0;1m >----------------[m
+[[1;34mINFO[m] [1mBuilding internetshop-checks 1.0.0                                 [6/6][m
+[[1;34mINFO[m]   from internetshop-checks\pom.xml
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.mojo:exec-maven-plugin:pom:3.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.mojo:mojo-parent:pom:69-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.junit:junit-bom:pom:5.8.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.mojo:exec-maven-plugin:jar:3.1.0-[IJ]-error=
+[IJ]-3-DependencyResolutionRequest-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-webapi:pom:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-webapi:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-infrastructure:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-application:jar:1.0.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=com.internetshop:internetshop-domain:jar:1.0.0-[IJ]-error=
+[IJ]-3-DependencyResolutionResult-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:resources[m [1m(default-resources)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-checks\src\main\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=resources-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:compile[m [1m(default-compile)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] Recompiling the module because of [1mchanged dependency[m.
+[[1;34mINFO[m] Compiling 1 source file with javac [debug release 21] to target\classes
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=compile-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mresources:3.3.1:testResources[m [1m(default-testResources)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory D:\duikt\apz\InternetShop\internetshop-checks\src\test\resources
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testResources-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mcompiler:3.13.0:testCompile[m [1m(default-testCompile)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=testCompile-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32msurefire:3.2.5:test[m [1m(default-test)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] No tests to run.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=test-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mjar:3.4.1:jar[m [1m(default-jar)[m @ [36minternetshop-checks[0;1m ---[m
+[[1;34mINFO[m] Building jar: D:\duikt\apz\InternetShop\internetshop-checks\target\internetshop-checks-1.0.0.jar
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=jar-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-MojoStarted-[IJ]-source=LIFECYCLE-[IJ]-goal=java-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mexec:3.1.0:java[m [1m(run-checks)[m @ [36minternetshop-checks[0;1m ---[m
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.mojo:exec-maven-plugin:pom:3.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:pom:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:8-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-component-annotations:pom:2.1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-containers:pom:2.1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus:pom:6.5-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-exec:pom:1.3-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-parent:pom:35-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.mojo:exec-maven-plugin:jar:3.1.0-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-utils:jar:3.4.2-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.codehaus.plexus:plexus-component-annotations:jar:2.1.1-[IJ]-error=
+[IJ]-3-ARTIFACT_RESOLVING-[IJ]-path=-[IJ]-artifactCoord=org.apache.commons:commons-exec:jar:1.3-[IJ]-error=
+PASS: Blank product name rejected
+PASS: Value object equality and normalization
+PASS: Zero price rejected
+PASS: Money equality ignores scale (10 == 10.00)
+PASS: Money with more than 2 decimals rejected
+PASS: Huge amount rejected without overflow
+PASS: Empty customer id rejected
+PASS: Quantity 0 rejected
+PASS: Quantity 100 rejected
+PASS: Empty order cannot be placed
+PASS: Item added and total calculated
+PASS: Same product merges quantity instead of a new line
+PASS: Merged quantity above 99 rejected
+PASS: Rejected operation does not alter aggregate
+PASS: Order total above limit rejected
+PASS: Lines can be changed only through the aggregate root
+PASS: Order placed
+PASS: Placed order is immutable
+PASS: Order cannot be placed twice
+PASS: Data survives restart (new store instances)
+PASS: Domain rules hold after rehydration
+PASS: Missing order reported
+PASS: Ordering asks Catalog through ProductCatalog contract: unknown product rejected
+PASS: Missing customer id rejected by domain
+PASS: Concurrent update rejected (optimistic version)
+PASS: Failed concurrent update leaves first result intact
+PASS: Domain depends only on the JDK and itself
+PASS: Application does not depend on Infrastructure, WebApi, HTTP or file system
+PASS: Ordering context does not use Catalog classes
+PASS: Catalog context does not use Ordering classes
+PASS: GET / returns the demo page
+PASS: GET /products returns seeded catalog
+PASS: POST /products -> 201, HTML characters escaped in JSON
+PASS: POST /orders -> 201 DRAFT
+PASS: Business rule violation -> 400 with message
+PASS: Item added via HTTP, total 21.00
+PASS: Order placed via HTTP
+PASS: Unknown order -> 404
+PASS: Malformed id -> 400
+PASS: Malformed JSON -> 400
+PASS: POST without JSON content type -> 415
+PASS: Unsupported method -> 405
+PASS: Oversized body -> 413
+All 43 checks passed.
+[IJ]-3-MojoSucceeded-[IJ]-source=LIFECYCLE-[IJ]-goal=java-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0-[IJ]-error=
+[IJ]-3-ProjectSucceeded-[IJ]-id=com.internetshop:internetshop-checks:jar:1.0.0
+[IJ]-3-SessionEnded-[IJ]-id=unknown
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1mReactor Summary for InternetShop 1.0.0:[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] InternetShop ....................................... [1;32mSUCCESS[m [  0.002 s]
+[[1;34mINFO[m] internetshop-domain ................................ [1;32mSUCCESS[m [  0.917 s]
+[[1;34mINFO[m] internetshop-application ........................... [1;32mSUCCESS[m [  0.031 s]
+[[1;34mINFO[m] internetshop-infrastructure ........................ [1;32mSUCCESS[m [  0.032 s]
+[[1;34mINFO[m] internetshop-webapi ................................ [1;32mSUCCESS[m [  0.450 s]
+[[1;34mINFO[m] internetshop-checks ................................ [1;32mSUCCESS[m [  1.202 s]
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1;32mBUILD SUCCESS[m
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] Total time:  2.790 s
+[[1;34mINFO[m] Finished at: 2026-10-02T21:27:06+03:00
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
