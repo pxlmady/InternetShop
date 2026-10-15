@@ -1,7 +1,8 @@
-# InternetShop: Clean Architecture та Domain-Driven Design
+# InternetShop: Clean Architecture, Domain-Driven Design та Event-Driven Design
 
-Практична робота №1 з дисципліни «Архітектура програмного забезпечення».
-Тема: **Чиста архітектура та Domain-Driven Design**.
+Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
+- №1 — **Чиста архітектура та Domain-Driven Design**;
+- №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -188,7 +189,9 @@ return toDto(order);                                           // 5. DTO для 
 | `GET /orders/{id}` | Одне замовлення | — |
 | `POST /orders` | Створити чернетку | `{"customerId":"11111111-1111-1111-1111-111111111111"}` |
 | `POST /orders/{id}/items` | Додати товар | `{"productId":"<id товару>","quantity":2}` |
-| `POST /orders/{id}/place` | Оформити замовлення | `{}` |
+| `POST /orders/{id}/place` | Оформити замовлення (публікує подію `OrderPlaced`) | `{}` |
+| `GET /notifications` | Сповіщення, створені обробником `OrderPlaced` (ПР2) | — |
+| `GET /statistics` | Статистика, яку оновлюють обробники подій (ПР2) | — |
 
 Для POST потрібен заголовок `Content-Type: application/json`.
 
@@ -214,6 +217,44 @@ return toDto(order);                                           // 5. DTO для 
 - Символи `< > &` у JSON екрануються; сторінка виводить дані лише через `textContent` і має заголовок `Content-Security-Policy`.
 - Робочі дані (`data/`) і результати збірки (`target/`) виключені з Git.
 
+## Практична робота №2: Event-Driven Design
+
+Після успішної бізнес-операції `OrderService` (ініціатор, producer) публікує **подію** — факт, що вже стався.
+Хто на неї реагує, `OrderService` не знає: обробники (consumers) підписуються на події в точці складання `InternetShopApp`.
+
+| Вимога методички | Реалізація |
+|---|---|
+| Використати проєкт попередньої роботи | Той самий InternetShop; шари, контексти та правила ПР1 не змінені |
+| Подія — окремий клас без бізнес-логіки | `OrderCreated`, `OrderPlaced` (Java `record`, лише дані) в `application/ordering/events` |
+| Обробники для окремих сценаріїв реакції | `OrderPlacedNotificationHandler` (сповіщення), `OrderCreatedStatisticsHandler`, `OrderPlacedStatisticsHandler` (статистика) |
+| Немає прямих залежностей між ініціатором і споживачами | `OrderService` знає лише інтерфейс `EventBus`; підписки — в `InternetShopApp`; перевіряє `Checks` |
+| Обробники не викликаються напряму з бізнес-логіки чи контролерів | Їх викликає лише `InProcessEventBus.publish` |
+| Перевірити роботу системи | `mvn verify`: 68 перевірок (51 з ПР1 + 17 нових) |
+
+| Компонент | Шар / пакет | Роль |
+|---|---|---|
+| `Event`, `EventBus`, `EventHandler<E>` | Application, `shared/events` | Контракти: подія, публікація, обробник (аналог `IEventBus`, `IEventHandler<T>`) |
+| `OrderCreated`, `OrderPlaced` | Application, `ordering/events` | Події контексту Ordering |
+| `OrderService` | Application, `ordering` | Producer: публікує подію **після** збереження агрегату |
+| `OrderPlacedNotificationHandler`, `Notification`, `NotificationOutbox` | Application, `notifications` | Consumer: сповіщення покупцю про оформлене замовлення |
+| `OrderCreatedStatisticsHandler`, `OrderPlacedStatisticsHandler`, `SalesStatistics` | Application, `analytics` | Consumers: статистика продажів |
+| `InProcessEventBus` | Infrastructure, `events` | Шина в межах процесу: зберігає підписки та передає подію обробникам |
+| `InMemoryNotificationOutbox` | Infrastructure, `notifications` | Імітація надсилання: останні 50 сповіщень у пам'яті |
+| `NotificationEndpoints`, `StatisticsEndpoints` | WebApi | `GET /notifications`, `GET /statistics` (лише читання) |
+
+```text
+POST /orders/{id}/place → OrderService.place → Order.place() → OrderStore.update → EventBus.publish(OrderPlaced)
+                                                                             ├─► OrderPlacedNotificationHandler → NotificationOutbox
+                                                                             └─► OrderPlacedStatisticsHandler   → SalesStatistics
+```
+
+Особливості реалізації:
+- Доставка **синхронна, у межах одного процесу** (без черги чи брокера повідомлень): простий варіант, достатній для одного застосунку.
+- Подія публікується лише після успішного збереження; відхилена операція подій не створює.
+- Помилка обробника записується в лог (без даних події) і не скасовує вже збережене замовлення та не заважає іншим обробникам.
+- Сповіщення й статистика зберігаються в пам'яті та обнуляються після перезапуску; замовлення й товари, як і раніше, у файлах.
+- Нова реакція на подію = новий клас-обробник + один рядок `subscribe` в `InternetShopApp`, без змін в `OrderService`.
+
 ## Запуск
 
 Потрібен **JDK 21** або новіший і **Maven 3.9+** (у IntelliJ IDEA Maven вбудований).
@@ -226,12 +267,12 @@ return toDto(order);                                           // 5. DTO для 
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 51 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 68 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 51 перевірка
+mvn verify                                         # збірка всіх модулів + 68 перевірок
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -260,7 +301,11 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
   видалення товару: зникає з каталогу (і після перезапуску), не змінює наявні замовлення, не додається до нових.
 - **Архітектура:** Domain імпортує лише JDK; Application не залежить від Infrastructure, WebApi, HTTP і файлової системи;
   Catalog і Ordering не імпортують класів один одного.
-- **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415.
+- **Події (ПР2):** `OrderCreated` і `OrderPlaced` публікуються після відповідних операцій і лише після успіху;
+  обробники створюють сповіщення та оновлюють статистику; збій одного обробника не скасовує операцію і не зупиняє інших.
+- **Архітектура (ПР2):** Ordering (producer) не імпортує обробників і реалізацію шини; події не містять доменних об'єктів;
+  обробники не звертаються до `OrderService` чи `OrderStore`.
+- **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
 
@@ -275,12 +320,18 @@ InternetShop/
 ├── internetshop-application/       pom.xml (-> domain)
 │   └── src/main/java/com/internetshop/application/
 │       ├── shared/        NotFoundException, ConcurrentChangeException
+│       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
 │       ├── catalog/       CatalogService, ProductStore, ProductDto, ProductNotFoundException
-│       └── ordering/      OrderService, OrderStore, ProductCatalog, CatalogProduct, OrderDto, OrderLineDto, ...
+│       ├── ordering/      OrderService, OrderStore, ProductCatalog, CatalogProduct, OrderDto, OrderLineDto, ...
+│       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
+│       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationOutbox   (ПР2)
+│       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2)
 ├── internetshop-infrastructure/    pom.xml (-> application, domain)
 │   └── src/main/java/com/internetshop/infrastructure/
 │       ├── persistence/   FileProductStore, FileOrderStore, TextDataFile
-│       └── integration/   CatalogProductAdapter
+│       ├── integration/   CatalogProductAdapter
+│       ├── events/        InProcessEventBus                            (ПР2)
+│       └── notifications/ InMemoryNotificationOutbox                   (ПР2)
 ├── internetshop-webapi/            pom.xml (-> application, infrastructure, domain; збирає internetshop.jar)
 │   ├── src/main/java/com/internetshop/webapi/   Main, InternetShopApp, http/, endpoints/
 │   └── src/main/resources/static/               index.html, app.js, styles.css
@@ -307,9 +358,14 @@ InternetShop/
 | Minimal API (Kestrel) | `com.sun.net.httpserver.HttpServer` з JDK |
 | `CourseDemo.Checks` (`dotnet run`) | `internetshop-checks` (`Checks`, запускається в `mvn verify`) |
 | Один контекст + `StudentId` | Два контексти (Catalog, Ordering) + `CustomerId` |
+| ПР2: `IEventBus`, `IEventHandler<T>`, `InProcessEventBus` | `EventBus`, `EventHandler<E>` (Application), `InProcessEventBus` (Infrastructure) |
+| ПР2: `record OrderCreated(...)` | `record OrderCreated`, `record OrderPlaced` |
+| ПР2: `_bus.PublishAsync(...)` у `CreateOrderHandler` | `events.publish(...)` в `OrderService.create` / `place` (синхронно) |
+| ПР2: `INotificationService`, `IAnalyticsService` | `OrderPlacedNotificationHandler`, `Order*StatisticsHandler` (реакції — окремі обробники) |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
-та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами. Усі 51 перевірка проходить.
+та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
+роботи обробників подій (ПР2). Усі 68 перевірок проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.

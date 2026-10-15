@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>InternetShop — DDD demo</title>
+  <title>InternetShop — DDD та Event-Driven demo</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <header>
   <h1>InternetShop</h1>
-  <p>Практична робота №1 · Clean Architecture та DDD · контексти <b>Catalog</b> і <b>Ordering</b></p>
+  <p>ПР1: Clean Architecture та DDD · контексти <b>Catalog</b> і <b>Ordering</b> · ПР2: Event-Driven Design · події <b>OrderCreated</b> і <b>OrderPlaced</b></p>
 </header>
 
 <main>
@@ -34,11 +34,19 @@
     <div id="orders"></div>
   </section>
 
+  <section>
+    <h2>Реакції на події</h2>
+    <p class="muted">Ці дані оновлюють обробники подій, а не OrderService: статистика реагує на OrderCreated і OrderPlaced, сповіщення — на OrderPlaced. Зберігаються в пам'яті й обнуляються після перезапуску.</p>
+    <p>Статистика: <span id="statistics"></span></p>
+    <h3>Сповіщення покупцям</h3>
+    <ul id="notifications"></ul>
+  </section>
+
   <div id="message" role="status"></div>
 </main>
 
 <footer>
-  JSON API: <a href="/products">/products</a> · <a href="/orders">/orders</a>
+  JSON API: <a href="/products">/products</a> · <a href="/orders">/orders</a> · <a href="/notifications">/notifications</a> · <a href="/statistics">/statistics</a>
 </footer>
 <script src="/app.js"></script>
 </body>

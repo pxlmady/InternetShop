@@ -1,15 +1,26 @@
 package com.internetshop.webapi;
 
+import com.internetshop.application.analytics.OrderCreatedStatisticsHandler;
+import com.internetshop.application.analytics.OrderPlacedStatisticsHandler;
+import com.internetshop.application.analytics.SalesStatistics;
 import com.internetshop.application.catalog.CatalogService;
 import com.internetshop.application.catalog.ProductStore;
+import com.internetshop.application.notifications.NotificationOutbox;
+import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
 import com.internetshop.application.ordering.OrderService;
 import com.internetshop.application.ordering.OrderStore;
 import com.internetshop.application.ordering.ProductCatalog;
+import com.internetshop.application.ordering.events.OrderCreated;
+import com.internetshop.application.ordering.events.OrderPlaced;
+import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
+import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
 import com.internetshop.infrastructure.persistence.FileOrderStore;
 import com.internetshop.infrastructure.persistence.FileProductStore;
+import com.internetshop.webapi.endpoints.NotificationEndpoints;
 import com.internetshop.webapi.endpoints.OrderEndpoints;
 import com.internetshop.webapi.endpoints.ProductEndpoints;
+import com.internetshop.webapi.endpoints.StatisticsEndpoints;
 import com.internetshop.webapi.http.Router;
 import com.sun.net.httpserver.HttpServer;
 
@@ -32,11 +43,20 @@ public final class InternetShopApp {
         // Infrastructure: реалізації контрактів Application.
         ProductStore productStore = new FileProductStore(dataDirectory);
         OrderStore orderStore = new FileOrderStore(dataDirectory);
+        InProcessEventBus eventBus = new InProcessEventBus();
+        NotificationOutbox notifications = new InMemoryNotificationOutbox();
 
         // Application: сценарії отримують лише інтерфейси.
         CatalogService catalog = new CatalogService(productStore);
         ProductCatalog productCatalog = new CatalogProductAdapter(catalog); // Ordering → Catalog
-        OrderService orders = new OrderService(orderStore, productCatalog);
+        OrderService orders = new OrderService(orderStore, productCatalog, eventBus); // producer подій
+        SalesStatistics statistics = new SalesStatistics();
+
+        // Event-Driven: хто на яку подію реагує, вирішується лише тут. OrderService про це не знає;
+        // нова реакція = новий обробник + один рядок підписки, без змін у сценаріях замовлень.
+        eventBus.subscribe(OrderCreated.class, new OrderCreatedStatisticsHandler(statistics));
+        eventBus.subscribe(OrderPlaced.class, new OrderPlacedNotificationHandler(notifications));
+        eventBus.subscribe(OrderPlaced.class, new OrderPlacedStatisticsHandler(statistics));
 
         seedCatalog(catalog);
 
@@ -46,6 +66,8 @@ public final class InternetShopApp {
                 .staticFile("/styles.css", "styles.css");
         ProductEndpoints.register(router, catalog);
         OrderEndpoints.register(router, orders);
+        NotificationEndpoints.register(router, notifications);
+        StatisticsEndpoints.register(router, statistics);
 
         // Слухаємо лише loopback (localhost): застосунок не доступний з інших комп'ютерів мережі.
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);

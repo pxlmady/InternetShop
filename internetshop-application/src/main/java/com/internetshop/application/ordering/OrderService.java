@@ -1,11 +1,15 @@
 package com.internetshop.application.ordering;
 
+import com.internetshop.application.ordering.events.OrderCreated;
+import com.internetshop.application.ordering.events.OrderPlaced;
+import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.domain.ordering.CustomerId;
 import com.internetshop.domain.ordering.Order;
 import com.internetshop.domain.ordering.OrderLine;
 import com.internetshop.domain.ordering.Quantity;
 import com.internetshop.domain.shared.Money;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -13,15 +17,19 @@ import java.util.UUID;
 /**
  * Сценарії контексту Ordering: завантажити агрегат → виконати доменну дію → зберегти → повернути DTO.
  * Сервіс організовує кроки, але бізнес-рішення приймає Order.
+ * Після успішного збереження сервіс публікує подію (OrderCreated, OrderPlaced) і не знає,
+ * хто на неї реагує: сповіщення та статистика підписані на події окремо, в точці складання.
  */
 public final class OrderService {
 
     private final OrderStore store;
     private final ProductCatalog catalog;
+    private final EventBus events;
 
-    public OrderService(OrderStore store, ProductCatalog catalog) {
+    public OrderService(OrderStore store, ProductCatalog catalog, EventBus events) {
         this.store = Objects.requireNonNull(store);
         this.catalog = Objects.requireNonNull(catalog);
+        this.events = Objects.requireNonNull(events);
     }
 
     public List<OrderDto> list() {
@@ -35,6 +43,8 @@ public final class OrderService {
     public OrderDto create(UUID customerId) {
         Order order = new Order(new CustomerId(customerId));
         store.add(order);
+        // Подія публікується лише після збереження: вона фіксує факт, який уже відбувся.
+        events.publish(new OrderCreated(order.getId(), Instant.now()));
         return toDto(order);
     }
 
@@ -52,6 +62,9 @@ public final class OrderService {
         Order order = load(orderId);
         order.place();
         store.update(order);
+        int itemCount = order.getLines().stream().mapToInt(l -> l.getQuantity().value()).sum();
+        events.publish(new OrderPlaced(order.getId(), order.getCustomerId().value(), itemCount,
+                order.total().amount(), Instant.now()));
         return toDto(order);
     }
 

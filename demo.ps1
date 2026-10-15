@@ -38,8 +38,12 @@ Next-Step
 Write-Host '6. Неіснуючий товар: очікуємо HTTP 404'
 Send-Demo "/orders/$($order.id)/items" @{ productId = [guid]::NewGuid().ToString(); quantity = 1 }
 Next-Step
-Write-Host '7. Оформлюємо замовлення'
+Write-Host '7. Оформлюємо замовлення: OrderService публікує подію OrderPlaced'
 Send-Demo "/orders/$($order.id)/place" @{}
+Next-Step
+Write-Host '7a. Реакції на подію (ПР2): сповіщення покупцю та статистика'
+Invoke-RestMethod "$BaseUrl/notifications" | Select-Object -First 1 | ConvertTo-Json
+Invoke-RestMethod "$BaseUrl/statistics" | ConvertTo-Json
 Next-Step
 Write-Host '8. Змінити оформлене замовлення: очікуємо HTTP 400'
 Send-Demo "/orders/$($order.id)/items" @{ productId = $product.id; quantity = 1 }

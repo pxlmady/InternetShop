@@ -100,9 +100,21 @@ function renderOrders(orders) {
       e.preventDefault();
       run(() => api('POST', `/orders/${o.id}/items`, { productId: select.value, quantity: Number(qty.value) }), 'Товар додано.');
     });
-    place.addEventListener('click', () => run(() => api('POST', `/orders/${o.id}/place`), 'Замовлення оформлено.'));
+    place.addEventListener('click', () => run(() => api('POST', `/orders/${o.id}/place`), 'Замовлення оформлено. Подія OrderPlaced: див. «Реакції на події».'));
     card.append(form);
     box.append(card);
+  }
+}
+
+function renderReactions(statistics, notifications) {
+  document.getElementById('statistics').textContent =
+    `створено замовлень: ${statistics.ordersCreated} · оформлено: ${statistics.ordersPlaced} · ` +
+    `продано одиниць: ${statistics.itemsSold} · виручка: ${money(statistics.revenue)} грн`;
+  const list = document.getElementById('notifications');
+  list.replaceChildren();
+  if (notifications.length === 0) list.append(el('li', 'Сповіщень ще немає.', 'muted'));
+  for (const n of notifications) {
+    list.append(el('li', `${new Date(n.createdAt).toLocaleTimeString()} · ${n.message}`));
   }
 }
 
@@ -110,6 +122,7 @@ async function refresh() {
   products = await api('GET', '/products');
   renderProducts();
   renderOrders(await api('GET', '/orders'));
+  renderReactions(await api('GET', '/statistics'), await api('GET', '/notifications'));
 }
 
 document.getElementById('customer').textContent = customerId;
