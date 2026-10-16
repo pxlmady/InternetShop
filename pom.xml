@@ -14,7 +14,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>InternetShop</name>
-    <description>Clean Architecture, DDD та Event-Driven Design: інтернет-магазин (практичні роботи №1–2)</description>
+    <description>Clean Architecture, DDD, Event-Driven Design та SOLID: інтернет-магазин (практичні роботи №1–3)</description>
 
     <modules>
         <module>internetshop-domain</module>

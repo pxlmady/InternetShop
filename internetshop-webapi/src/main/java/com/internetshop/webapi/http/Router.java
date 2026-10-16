@@ -1,19 +1,15 @@
 package com.internetshop.webapi.http;
 
-import com.internetshop.application.shared.ConcurrentChangeException;
-import com.internetshop.application.shared.NotFoundException;
-import com.internetshop.domain.shared.DomainRuleException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,8 +17,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Маршрутизація HTTP-запитів та єдине місце перетворення помилок Domain/Application
- * на HTTP-відповіді (аналог middleware у Program.cs з CourseDemo).
+ * Маршрутизація HTTP-запитів і єдина точка обробки помилок (аналог middleware у Program.cs з CourseDemo).
+ * <p>
+ * ПР3 (SOLID): Router лише знаходить маршрут і викликає обробник (SRP). Які винятки якому статусу
+ * відповідають, вирішує ErrorMapper, переданий через конструктор (OCP + DIP), — тому Router не знає
+ * класів Domain/Application. Запис відповідей і заголовків безпеки — у HttpResponses (SRP).
  */
 public final class Router implements HttpHandler {
 
@@ -39,6 +38,11 @@ public final class Router implements HttpHandler {
 
     private final List<Route> routes = new ArrayList<>();
     private final Map<String, String> staticFiles = new HashMap<>();
+    private final ErrorMapper errors;
+
+    public Router(ErrorMapper errors) {
+        this.errors = Objects.requireNonNull(errors);
+    }
 
     /** Шаблон на кшталт /orders/{id}/items; параметри — сегменти без «/». */
     public Router route(String method, String template, Function<Request, Response> handler) {
@@ -70,7 +74,7 @@ public final class Router implements HttpHandler {
             try {
                 if (staticFiles.containsKey(path)) {
                     if (!method.equals("GET")) throw new BadRequestException(405, "Метод не підтримується.");
-                    sendStatic(exchange, staticFiles.get(path));
+                    HttpResponses.staticResource(exchange, staticFiles.get(path));
                     return;
                 }
                 boolean pathMatched = false;
@@ -83,24 +87,23 @@ public final class Router implements HttpHandler {
                     for (int i = 0; i < route.params().size(); i++) params.put(route.params().get(i), m.group(i + 1));
                     if (method.equals("POST")) requireJson(exchange);
                     Response r = route.handler().apply(new Request(exchange, params));
-                    if (r.status() == 204) send(exchange, 204, new byte[0]); // 204: відповідь без тіла
-                    else sendJson(exchange, r.status(), r.body());
+                    if (r.status() == 204) HttpResponses.empty(exchange, 204); // 204: відповідь без тіла
+                    else HttpResponses.json(exchange, r.status(), r.body());
                     return;
                 }
                 if (pathMatched) throw new BadRequestException(405, "Метод не підтримується.");
                 throw new BadRequestException(404, "Ресурс не знайдено.");
-            } catch (DomainRuleException e) {
-                sendError(exchange, 400, e.getMessage());
-            } catch (NotFoundException e) {
-                sendError(exchange, 404, e.getMessage());
-            } catch (ConcurrentChangeException e) {
-                sendError(exchange, 409, e.getMessage());
             } catch (BadRequestException e) {
-                sendError(exchange, e.status(), e.getMessage());
+                HttpResponses.error(exchange, e.status(), e.getMessage());
             } catch (RuntimeException e) {
-                // Подробиці помилки лише в лог сервера; клієнт не отримує стек та внутрішні дані.
-                LOG.log(Level.SEVERE, "Unhandled error for " + method + " " + path, e);
-                sendError(exchange, 500, "Внутрішня помилка сервера.");
+                OptionalInt status = errors.statusFor(e);
+                if (status.isPresent()) {
+                    HttpResponses.error(exchange, status.getAsInt(), e.getMessage());
+                } else {
+                    // Подробиці помилки лише в лог сервера; клієнт не отримує стек та внутрішні дані.
+                    LOG.log(Level.SEVERE, "Unhandled error for " + method + " " + path, e);
+                    HttpResponses.error(exchange, 500, "Внутрішня помилка сервера.");
+                }
             }
         }
     }
@@ -113,39 +116,5 @@ public final class Router implements HttpHandler {
         String type = exchange.getRequestHeaders().getFirst("Content-Type");
         if (type == null || !type.toLowerCase().startsWith("application/json"))
             throw new BadRequestException(415, "Потрібен Content-Type: application/json.");
-    }
-
-    private static void sendError(HttpExchange exchange, int status, String message) throws IOException {
-        sendJson(exchange, status, Map.of("error", message));
-    }
-
-    private static void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
-        byte[] bytes = Json.write(body).getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().set("Cache-Control", "no-store");
-        send(exchange, status, bytes);
-    }
-
-    private static void sendStatic(HttpExchange exchange, String resourceName) throws IOException {
-        byte[] bytes;
-        try (InputStream in = Router.class.getResourceAsStream("/static/" + resourceName)) {
-            if (in == null) throw new BadRequestException(404, "Ресурс не знайдено.");
-            bytes = in.readAllBytes();
-        }
-        String type = resourceName.endsWith(".js") ? "text/javascript; charset=utf-8"
-                : resourceName.endsWith(".css") ? "text/css; charset=utf-8"
-                : "text/html; charset=utf-8";
-        exchange.getResponseHeaders().set("Content-Type", type);
-        exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'");
-        send(exchange, 200, bytes);
-    }
-
-    private static void send(HttpExchange exchange, int status, byte[] bytes) throws IOException {
-        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
-        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
-        exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
-        }
     }
 }

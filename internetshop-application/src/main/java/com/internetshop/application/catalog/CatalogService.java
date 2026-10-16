@@ -11,10 +11,11 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Сценарії контексту Catalog. Також є публічною точкою входу (контрактом)
- * для інших контекстів, яким потрібні дані про товари.
+ * Сценарії контексту Catalog. Для інших контекстів відкритий лише через вузький контракт
+ * ProductQueries (читання), а не весь клас разом зі створенням і видаленням (ПР3, ISP).
+ * Перетворення на DTO винесено в ProductMapper (ПР3, SRP).
  */
-public final class CatalogService {
+public final class CatalogService implements ProductQueries {
 
     private final ProductStore store;
 
@@ -22,13 +23,15 @@ public final class CatalogService {
         this.store = Objects.requireNonNull(store);
     }
 
+    @Override
     public List<ProductDto> list() {
-        return store.findAll().stream().map(CatalogService::toDto).toList();
+        return store.findAll().stream().map(ProductMapper::toDto).toList();
     }
 
+    @Override
     public ProductDto get(UUID id) {
         if (id == null) throw new ProductNotFoundException();
-        return toDto(store.findById(id).orElseThrow(ProductNotFoundException::new));
+        return ProductMapper.toDto(store.findById(id).orElseThrow(ProductNotFoundException::new));
     }
 
     public ProductDto create(String name, String description, BigDecimal price) {
@@ -36,7 +39,7 @@ public final class CatalogService {
         // Бізнес-правила перевіряють ProductName, Money та Product.
         Product product = new Product(new ProductName(name), description, new Money(price));
         store.add(product);
-        return toDto(product);
+        return ProductMapper.toDto(product);
     }
 
     /**
@@ -46,9 +49,5 @@ public final class CatalogService {
     public void delete(UUID id) {
         if (id == null || store.findById(id).isEmpty()) throw new ProductNotFoundException();
         store.remove(id);
-    }
-
-    private static ProductDto toDto(Product p) {
-        return new ProductDto(p.getId(), p.getName().value(), p.getDescription(), p.getPrice().amount());
     }
 }

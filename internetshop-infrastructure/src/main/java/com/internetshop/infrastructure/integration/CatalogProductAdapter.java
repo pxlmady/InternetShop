@@ -1,8 +1,8 @@
 package com.internetshop.infrastructure.integration;
 
-import com.internetshop.application.catalog.CatalogService;
 import com.internetshop.application.catalog.ProductDto;
 import com.internetshop.application.catalog.ProductNotFoundException;
+import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.ordering.CatalogProduct;
 import com.internetshop.application.ordering.ProductCatalog;
 
@@ -12,14 +12,17 @@ import java.util.UUID;
 
 /**
  * Адаптер між bounded contexts (антикорупційний шар): реалізує контракт Ordering (ProductCatalog)
- * через публічний сервіс Catalog і перекладає ProductDto у CatalogProduct.
+ * через публічний контракт Catalog і перекладає ProductDto у CatalogProduct.
  * Якщо Catalog колись стане окремим сервісом, зміниться лише цей клас.
+ * <p>
+ * ПР3: залежить від абстракції ProductQueries (DIP), а не від конкретного CatalogService,
+ * і бачить лише читання каталогу (ISP) — створювати чи видаляти товари адаптер не може.
  */
 public final class CatalogProductAdapter implements ProductCatalog {
 
-    private final CatalogService catalog;
+    private final ProductQueries catalog;
 
-    public CatalogProductAdapter(CatalogService catalog) {
+    public CatalogProductAdapter(ProductQueries catalog) {
         this.catalog = Objects.requireNonNull(catalog);
     }
 

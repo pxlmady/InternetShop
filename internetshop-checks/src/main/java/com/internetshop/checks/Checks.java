@@ -4,10 +4,16 @@ import com.internetshop.application.analytics.OrderCreatedStatisticsHandler;
 import com.internetshop.application.analytics.OrderPlacedStatisticsHandler;
 import com.internetshop.application.analytics.SalesStatistics;
 import com.internetshop.application.catalog.CatalogService;
+import com.internetshop.application.catalog.ProductDto;
+import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.catalog.ProductNotFoundException;
 import com.internetshop.application.notifications.Notification;
+import com.internetshop.application.notifications.NotificationFeed;
+import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
+import com.internetshop.application.ordering.CatalogProduct;
 import com.internetshop.application.ordering.OrderDto;
+import com.internetshop.application.ordering.OrderMapper;
 import com.internetshop.application.ordering.OrderNotFoundException;
 import com.internetshop.application.ordering.OrderService;
 import com.internetshop.application.ordering.ProductNotInCatalogException;
@@ -15,6 +21,8 @@ import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.shared.events.Event;
 import com.internetshop.application.shared.ConcurrentChangeException;
+import com.internetshop.application.shared.NotFoundException;
+import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.domain.catalog.Product;
 import com.internetshop.domain.catalog.ProductName;
 import com.internetshop.domain.ordering.CustomerId;
@@ -28,20 +36,31 @@ import com.internetshop.infrastructure.integration.CatalogProductAdapter;
 import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
 import com.internetshop.infrastructure.persistence.FileOrderStore;
 import com.internetshop.infrastructure.persistence.FileProductStore;
+import com.internetshop.infrastructure.time.SystemTimeProvider;
 import com.internetshop.webapi.InternetShopApp;
+import com.internetshop.webapi.endpoints.NotificationEndpoints;
+import com.internetshop.webapi.http.ErrorMapper;
+import com.internetshop.webapi.http.Router;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,12 +68,16 @@ import java.util.stream.Stream;
 
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
- * події та обробники (ПР2) -> межі шарів і контекстів -> HTTP. Використовують окрему тимчасову папку даних.
+ * події та обробники (ПР2) -> принципи SOLID (ПР3) -> межі шарів і контекстів -> HTTP.
+ * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
  */
 public final class Checks {
 
     private static int passed;
+
+    /** Справжнє джерело часу для сценаріїв, де конкретний час неважливий. */
+    private static final TimeProvider CLOCK = new SystemTimeProvider();
 
     public static void main(String[] args) throws Exception {
         domainCatalog();
@@ -63,6 +86,7 @@ public final class Checks {
         try {
             persistenceAndContexts(tmp.resolve("store"));
             events(tmp.resolve("events"));
+            solid(tmp.resolve("solid"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
         } finally {
@@ -117,7 +141,7 @@ public final class Checks {
 
     private static void persistenceAndContexts(Path dir) {
         CatalogService catalog = new CatalogService(new FileProductStore(dir));
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), new InProcessEventBus());
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), new InProcessEventBus(), CLOCK);
         UUID productId = catalog.create("Ноутбук", "14 дюймів", new BigDecimal("30000")).id();
         UUID orderId = orders.create(UUID.randomUUID()).id();
         orders.addItem(orderId, productId, 1);
@@ -126,7 +150,7 @@ public final class Checks {
         // Нові екземпляри сховищ = «перезапуск застосунку»: дані читаються з файлів.
         CatalogService catalog2 = new CatalogService(new FileProductStore(dir));
         FileOrderStore orderStore2 = new FileOrderStore(dir);
-        OrderService orders2 = new OrderService(orderStore2, new CatalogProductAdapter(catalog2), new InProcessEventBus());
+        OrderService orders2 = new OrderService(orderStore2, new CatalogProductAdapter(catalog2), new InProcessEventBus(), CLOCK);
         OrderDto saved = orders2.get(orderId);
         check(catalog2.get(productId).name().equals("Ноутбук")
                 && saved.status().equals("PLACED") && saved.lines().size() == 1
@@ -169,7 +193,7 @@ public final class Checks {
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add); // «спостерігач» за всіма подіями — лише для перевірок
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus);
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, CLOCK);
 
         UUID productId = catalog.create("Миша", "", new BigDecimal("100.50")).id();
         UUID customerId = UUID.randomUUID();
@@ -212,7 +236,7 @@ public final class Checks {
         bus2.subscribe(OrderPlaced.class, e -> { throw new IllegalStateException("handler failure"); });
         bus2.subscribe(OrderPlaced.class, new OrderPlacedNotificationHandler(outbox2));
         bus2.subscribe(OrderPlaced.class, new OrderPlacedStatisticsHandler(stats2));
-        OrderService orders2 = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus2);
+        OrderService orders2 = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus2, CLOCK);
         UUID order2 = orders2.create(customerId).id();
         orders2.addItem(order2, productId, 1);
         Logger busLog = Logger.getLogger(InProcessEventBus.class.getName());
@@ -230,8 +254,108 @@ public final class Checks {
                 "Other handlers still receive the event after one fails");
         check(stats2.snapshot().ordersCreated() == 0, "Event reaches only handlers subscribed to its type");
 
-        for (int i = 0; i < 60; i++) outbox2.add(n);
+        for (int i = 0; i < 60; i++) outbox2.send(n);
         check(outbox2.findRecent().size() == 50, "Notification outbox keeps a bounded number of messages");
+    }
+
+    // ---------------- ПР3: принципи SOLID після рефакторингу ----------------
+
+    private static void solid(Path dir) throws Exception {
+        // SRP: перетворення на DTO — окремий клас; OrderService лише організовує сценарії.
+        Order order = new Order(new CustomerId(UUID.randomUUID()));
+        UUID mouse = UUID.randomUUID();
+        order.addItem(mouse, "Миша", Money.of("100.50"), new Quantity(2));
+        OrderDto dto = OrderMapper.toDto(order);
+        check(dto.id().equals(order.getId()) && dto.status().equals("DRAFT") && dto.lines().size() == 1
+                        && dto.lines().get(0).productId().equals(mouse) && dto.lines().get(0).lineTotal().compareTo(new BigDecimal("201")) == 0
+                        && dto.total().compareTo(new BigDecimal("201")) == 0,
+                "SRP: OrderMapper converts the aggregate to DTO");
+        check(Arrays.stream(OrderService.class.getDeclaredMethods()).noneMatch(m -> m.getName().equals("toDto")),
+                "SRP: OrderService no longer contains DTO mapping");
+
+        // DIP: усі залежності OrderService — абстракції, які передаються через конструктор.
+        Constructor<?>[] ctors = OrderService.class.getConstructors();
+        check(ctors.length == 1 && ctors[0].getParameterCount() == 4
+                        && Arrays.stream(ctors[0].getParameterTypes()).allMatch(Class::isInterface),
+                "DIP: OrderService depends only on interfaces injected through its constructor");
+
+        // DIP: час події задає підставлена реалізація TimeProvider, а не системний годинник.
+        Instant fixed = Instant.parse("2026-01-01T10:00:00Z");
+        CatalogService catalog = new CatalogService(new FileProductStore(dir));
+        UUID productId = catalog.create("Кабель", "", new BigDecimal("199")).id();
+        InProcessEventBus bus = new InProcessEventBus();
+        List<Event> published = new ArrayList<>();
+        bus.subscribe(Event.class, published::add);
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, () -> fixed);
+        UUID orderId = orders.create(UUID.randomUUID()).id();
+        orders.addItem(orderId, productId, 1);
+        orders.place(orderId);
+        check(published.size() == 2 && published.stream().allMatch(e -> e.occurredAt().equals(fixed)),
+                "DIP: event time comes from the injected TimeProvider (testable without the system clock)");
+
+        // DIP + ISP: адаптер Ordering → Catalog працює з будь-якою реалізацією вузького ProductQueries.
+        check(Arrays.equals(CatalogProductAdapter.class.getConstructors()[0].getParameterTypes(),
+                        new Class<?>[]{ProductQueries.class}) && ProductQueries.class.isInterface(),
+                "DIP + ISP: CatalogProductAdapter depends on read-only ProductQueries, not on CatalogService");
+        UUID knownId = UUID.randomUUID();
+        ProductQueries stub = new ProductQueries() {
+            @Override public List<ProductDto> list() { return List.of(); }
+            @Override public ProductDto get(UUID id) {
+                if (!knownId.equals(id)) throw new com.internetshop.application.catalog.ProductNotFoundException();
+                return new ProductDto(knownId, "Тестовий товар", "", new BigDecimal("5.00"));
+            }
+        };
+        CatalogProductAdapter adapter = new CatalogProductAdapter(stub);
+        Optional<CatalogProduct> found = adapter.findProduct(knownId);
+        check(found.isPresent() && found.get().name().equals("Тестовий товар") && adapter.findProduct(UUID.randomUUID()).isEmpty(),
+                "DIP: adapter works with a stub catalog (no files, no CatalogService)");
+
+        // ISP: обробник сповіщень лише надсилає, HTTP-маршрут лише читає.
+        check(Arrays.equals(OrderPlacedNotificationHandler.class.getConstructors()[0].getParameterTypes(),
+                        new Class<?>[]{NotificationSender.class}) && NotificationSender.class.getMethods().length == 1,
+                "ISP: notification handler gets only NotificationSender (cannot read notifications)");
+        Method register = NotificationEndpoints.class.getMethod("register", Router.class, NotificationFeed.class);
+        check(register.getParameterTypes()[1] == NotificationFeed.class && NotificationFeed.class.getMethods().length == 1,
+                "ISP: GET /notifications gets only read-only NotificationFeed");
+        InMemoryNotificationOutbox outbox = new InMemoryNotificationOutbox();
+        NotificationSender sender = outbox;
+        NotificationFeed feed = outbox;
+        sender.send(new Notification(UUID.randomUUID(), orderId, "test", fixed));
+        check(feed.findRecent().size() == 1, "ISP: one implementation serves both narrow interfaces");
+
+        // LSP: правило для базового NotFoundException коректно працює для всіх підтипів.
+        ErrorMapper errors = new ErrorMapper().map(NotFoundException.class, 404);
+        check(errors.statusFor(new com.internetshop.application.catalog.ProductNotFoundException()).orElse(0) == 404
+                        && errors.statusFor(new OrderNotFoundException()).orElse(0) == 404
+                        && errors.statusFor(new IllegalStateException()).isEmpty(),
+                "LSP: subtypes of NotFoundException are handled by the base-type rule");
+
+        // OCP: новий тип помилки підключається новим правилом, без жодних змін у Router.
+        final class OutOfStockException extends RuntimeException {
+            OutOfStockException() { super("Немає на складі."); }
+        }
+        Router router = new Router(new ErrorMapper().map(OutOfStockException.class, 422))
+                .route("GET", "/new-rule", req -> { throw new OutOfStockException(); })
+                .route("GET", "/unexpected", req -> { throw new IllegalStateException("internal-secret-detail"); });
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", router);
+        server.start();
+        Logger routerLog = Logger.getLogger(Router.class.getName());
+        Level previous = routerLog.getLevel();
+        routerLog.setLevel(Level.OFF); // очікувана «неочікувана» помилка не засмічує вивід перевірок
+        try {
+            String base = "http://localhost:" + server.getAddress().getPort();
+            HttpClient client = HttpClient.newHttpClient();
+            HttpResponse<String> mapped = send(client, "GET", base + "/new-rule", null, null);
+            check(mapped.statusCode() == 422 && mapped.body().contains("Немає на складі."),
+                    "OCP: new exception type mapped to HTTP status without changing Router");
+            HttpResponse<String> unexpected = send(client, "GET", base + "/unexpected", null, null);
+            check(unexpected.statusCode() == 500 && !unexpected.body().contains("internal-secret-detail"),
+                    "Unmapped error -> 500 without internal details");
+        } finally {
+            routerLog.setLevel(previous);
+            server.stop(0);
+        }
     }
 
     // ---------------- Межі шарів і bounded contexts ----------------
@@ -266,6 +390,23 @@ public final class Checks {
         consumers.addAll(importsOf(application.resolve("com/internetshop/application/analytics")));
         check(consumers.stream().noneMatch(i -> i.contains("OrderService") || i.contains("OrderStore")),
                 "Event handlers do not call Ordering services or stores");
+
+        // ПР3: сценарії не звертаються до системного годинника напряму, Router не знає винятків внутрішніх шарів.
+        check(sourcesOf(application).stream().noneMatch(src -> src.contains("Instant.now(") || src.contains("System.currentTimeMillis(")
+                        || src.contains("LocalDateTime.now(")),
+                "DIP: Application does not read the system clock directly (uses TimeProvider)");
+        Path router = root.resolve("internetshop-webapi/src/main/java/com/internetshop/webapi/http/Router.java");
+        check(Files.readAllLines(router).stream().map(String::trim).filter(l -> l.startsWith("import "))
+                        .noneMatch(i -> i.contains("com.internetshop.domain") || i.contains("com.internetshop.application")),
+                "OCP: Router does not reference Domain/Application exceptions (rules live in ErrorMapper)");
+    }
+
+    private static List<String> sourcesOf(Path dir) throws IOException {
+        List<String> sources = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(dir)) {
+            for (Path f : files.filter(p -> p.toString().endsWith(".java")).toList()) sources.add(Files.readString(f));
+        }
+        return sources;
     }
 
     private static List<String> importsOf(Path dir) throws IOException {

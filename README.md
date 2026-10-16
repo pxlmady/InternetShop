@@ -1,8 +1,9 @@
-# InternetShop: Clean Architecture, Domain-Driven Design та Event-Driven Design
+# InternetShop: Clean Architecture, DDD, Event-Driven Design та SOLID
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
-- №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design)).
+- №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design));
+- №3 — **Принципи SOLID** (аналіз порушень і рефакторинг, див. [розділ ПР3](#практична-робота-3-принципи-solid)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -102,9 +103,9 @@ Value Objects реалізовані як Java `record`: вони незмінн
 | Шар (модуль) | Компоненти | Відповідальність |
 |---|---|---|
 | **Domain** | `Product`, `ProductName`, `Order`, `OrderLine`, `Quantity`, `CustomerId`, `Money`, `Entity` | Модель і бізнес-правила. Лише JDK |
-| **Application** | `CatalogService`, `OrderService`, інтерфейси `ProductStore`, `OrderStore`, `ProductCatalog`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
-| **Infrastructure** | `FileProductStore`, `FileOrderStore`, `TextDataFile`, `CatalogProductAdapter` | Збереження у файли; адаптер між контекстами |
-| **WebApi** | `Main`, `InternetShopApp`, `Router`, `Request`, `Json`, `ProductEndpoints`, `OrderEndpoints`, статична сторінка | HTTP, JSON, складання залежностей, перетворення помилок на HTTP-статуси |
+| **Application** | `CatalogService`, `OrderService`, мапери DTO, інтерфейси `ProductStore`, `OrderStore`, `ProductCatalog`, `ProductQueries`, `TimeProvider`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
+| **Infrastructure** | `FileProductStore`, `FileOrderStore`, `TextDataFile`, `CatalogProductAdapter`, `SystemTimeProvider` | Збереження у файли; адаптер між контекстами; системний час |
+| **WebApi** | `Main`, `InternetShopApp`, `Router`, `ErrorMapper`, `HttpResponses`, `Request`, `Json`, `*Endpoints`, статична сторінка | HTTP, JSON, складання залежностей, перетворення помилок на HTTP-статуси |
 | Checks | `Checks` | Консольні перевірки (аналог `CourseDemo.Checks`) |
 
 Залежності між модулями задані в `pom.xml` кожного модуля (розділ `<dependencies>`); інший напрям не скомпілюється:
@@ -134,7 +135,7 @@ ProductStore productStore = new FileProductStore(dataDirectory);
 OrderStore orderStore = new FileOrderStore(dataDirectory);
 CatalogService catalog = new CatalogService(productStore);
 ProductCatalog productCatalog = new CatalogProductAdapter(catalog); // Ordering -> Catalog
-OrderService orders = new OrderService(orderStore, productCatalog);
+OrderService orders = new OrderService(orderStore, productCatalog, eventBus, time); // ПР2 + ПР3
 ```
 
 DI-контейнера немає: залежності передаються через конструктори вручну.
@@ -236,7 +237,7 @@ return toDto(order);                                           // 5. DTO для 
 | `Event`, `EventBus`, `EventHandler<E>` | Application, `shared/events` | Контракти: подія, публікація, обробник (аналог `IEventBus`, `IEventHandler<T>`) |
 | `OrderCreated`, `OrderPlaced` | Application, `ordering/events` | Події контексту Ordering |
 | `OrderService` | Application, `ordering` | Producer: публікує подію **після** збереження агрегату |
-| `OrderPlacedNotificationHandler`, `Notification`, `NotificationOutbox` | Application, `notifications` | Consumer: сповіщення покупцю про оформлене замовлення |
+| `OrderPlacedNotificationHandler`, `Notification`, `NotificationSender`, `NotificationFeed` (до ПР3 — `NotificationOutbox`) | Application, `notifications` | Consumer: сповіщення покупцю про оформлене замовлення |
 | `OrderCreatedStatisticsHandler`, `OrderPlacedStatisticsHandler`, `SalesStatistics` | Application, `analytics` | Consumers: статистика продажів |
 | `InProcessEventBus` | Infrastructure, `events` | Шина в межах процесу: зберігає підписки та передає подію обробникам |
 | `InMemoryNotificationOutbox` | Infrastructure, `notifications` | Імітація надсилання: останні 50 сповіщень у пам'яті |
@@ -244,7 +245,7 @@ return toDto(order);                                           // 5. DTO для 
 
 ```text
 POST /orders/{id}/place → OrderService.place → Order.place() → OrderStore.update → EventBus.publish(OrderPlaced)
-                                                                             ├─► OrderPlacedNotificationHandler → NotificationOutbox
+                                                                             ├─► OrderPlacedNotificationHandler → NotificationSender
                                                                              └─► OrderPlacedStatisticsHandler   → SalesStatistics
 ```
 
@@ -254,6 +255,54 @@ POST /orders/{id}/place → OrderService.place → Order.place() → OrderStore.
 - Помилка обробника записується в лог (без даних події) і не скасовує вже збережене замовлення та не заважає іншим обробникам.
 - Сповіщення й статистика зберігаються в пам'яті та обнуляються після перезапуску; замовлення й товари, як і раніше, у файлах.
 - Нова реакція на подію = новий клас-обробник + один рядок `subscribe` в `InternetShopApp`, без змін в `OrderService`.
+
+## Практична робота №3: Принципи SOLID
+
+Завдання: знайти в наявному коді порушення принципів SOLID і виправити їх рефакторингом, **не змінюючи поведінку системи**.
+Основні принципи — **SRP і DIP** (рекомендовані методичкою), додатково ISP та OCP; LSP перевірено аналізом.
+Функціонал, HTTP API і формат даних не змінилися: усі 68 перевірок ПР1–ПР2 проходять з тими самими очікуваннями (змінено лише виклики нових конструкторів), додано 14 нових.
+
+| Вимога методички | Реалізація |
+|---|---|
+| Проаналізувати компоненти і знайти порушення SOLID | Таблиця нижче: 5 знайдених порушень у Application, Infrastructure і WebApi |
+| Обрати мінімум два принципи (рекомендовано SRP + DIP) | SRP і DIP — основні; також ISP і OCP |
+| Виконати рефакторинг | Нові класи/інтерфейси: `OrderMapper`, `ProductMapper`, `TimeProvider`, `SystemTimeProvider`, `ProductQueries`, `NotificationSender`, `NotificationFeed`, `ErrorMapper`, `HttpResponses` |
+| Зберегти працездатність і функціонал | `mvn verify`: 82 перевірки (68 з ПР1–ПР2 + 14 нових) |
+| Обґрунтувати зміни | Колонки «Порушення» і «Виправлення» нижче |
+
+| Принцип | Порушення (до ПР3) | Виправлення |
+|---|---|---|
+| **SRP** | `OrderService` і `CatalogService` поєднували сценарії та перетворення агрегатів на DTO | Мапінг винесено в `OrderMapper` і `ProductMapper`; сервіси лише організовують сценарії |
+| **SRP + OCP** | `Router` одночасно шукав маршрут, знав винятки Domain/Application (ланцюжок `catch`), формував відповіді й заголовки безпеки. Новий тип помилки = зміна `Router` | `Router` лише маршрутизує; правила «виняток → статус» — у `ErrorMapper` (налаштовується в `InternetShopApp`), запис відповідей — у `HttpResponses` |
+| **DIP** | `OrderService` напряму викликав системний годинник `Instant.now()` — прихована залежність від конкретної деталі, час подій неможливо підмінити | Абстракція `TimeProvider` в Application, реалізація `SystemTimeProvider` в Infrastructure, передається через конструктор |
+| **DIP + ISP** | `CatalogProductAdapter` залежав від конкретного класу `CatalogService` і через нього мав доступ до створення й видалення товарів, хоча потрібен лише пошук | Вузький інтерфейс `ProductQueries` (`list`, `get`), який реалізує `CatalogService`; адаптер залежить лише від нього |
+| **ISP** | Один інтерфейс `NotificationOutbox` (`add` + `findRecent`): обробник події залежав від читання, а HTTP-маршрут — від запису | `NotificationSender` (для обробника) і `NotificationFeed` (для `GET /notifications`); `InMemoryNotificationOutbox` реалізує обидва |
+| **LSP** (аналіз) | Порушень не знайдено: підтипи не посилюють передумов і не кидають `UnsupportedOperationException` | Показано перевіркою: правило для `NotFoundException` коректно обробляє `ProductNotFoundException` і `OrderNotFoundException` |
+
+```mermaid
+flowchart LR
+    subgraph Application
+        OS[OrderService] --> TP[[TimeProvider]]
+        OS --> OM[OrderMapper]
+        CS[CatalogService] -. implements .-> PQ[[ProductQueries]]
+        H[OrderPlacedNotificationHandler] --> NS[[NotificationSender]]
+    end
+    subgraph Infrastructure
+        STP[SystemTimeProvider] -. implements .-> TP
+        AD[CatalogProductAdapter] --> PQ
+        OUT[InMemoryNotificationOutbox] -. implements .-> NS
+        OUT -. implements .-> NF[[NotificationFeed]]
+    end
+    subgraph WebApi
+        R[Router] --> EM[ErrorMapper]
+        R --> HR[HttpResponses]
+        NE[NotificationEndpoints] --> NF
+    end
+```
+
+Що це дає: класи змінюються з однієї причини (формат DTO, правила HTTP-помилок, запис відповідей — кожне в одному місці);
+сценарії й адаптер можна перевірити із заглушками (фіксований час, тестовий каталог) без файлів і системного годинника;
+кожен клієнт бачить лише потрібні методи — адаптер не може видалити товар, а HTTP-маршрут не може створити сповіщення.
 
 ## Запуск
 
@@ -267,12 +316,12 @@ POST /orders/{id}/place → OrderService.place → Order.place() → OrderStore.
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 68 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 82 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 68 перевірок
+mvn verify                                         # збірка всіх модулів + 82 перевірки
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -305,6 +354,11 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
   обробники створюють сповіщення та оновлюють статистику; збій одного обробника не скасовує операцію і не зупиняє інших.
 - **Архітектура (ПР2):** Ordering (producer) не імпортує обробників і реалізацію шини; події не містять доменних об'єктів;
   обробники не звертаються до `OrderService` чи `OrderStore`.
+- **SOLID (ПР3):** `OrderMapper` і відсутність мапінгу в `OrderService` (SRP); `OrderService` залежить лише від інтерфейсів,
+  час подій задає підставлений `TimeProvider`, адаптер працює із заглушкою `ProductQueries` (DIP);
+  обробник отримує лише `NotificationSender`, маршрут — лише `NotificationFeed` (ISP); підтипи `NotFoundException` → 404 одним правилом (LSP);
+  новий тип винятку → HTTP-статус без змін у `Router`, неочікувана помилка → 500 без внутрішніх деталей (OCP);
+  Application не читає системний годинник напряму, `Router` не імпортує класів Domain/Application.
 - **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
@@ -319,26 +373,26 @@ InternetShop/
 │       └── ordering/      Order, OrderLine, Quantity, CustomerId, OrderStatus
 ├── internetshop-application/       pom.xml (-> domain)
 │   └── src/main/java/com/internetshop/application/
-│       ├── shared/        NotFoundException, ConcurrentChangeException
+│       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3)
 │       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
-│       ├── catalog/       CatalogService, ProductStore, ProductDto, ProductNotFoundException
-│       ├── ordering/      OrderService, OrderStore, ProductCatalog, CatalogProduct, OrderDto, OrderLineDto, ...
+│       ├── catalog/       CatalogService, ProductQueries, ProductMapper, ProductStore, ProductDto, ...
+│       ├── ordering/      OrderService, OrderMapper, OrderStore, ProductCatalog, CatalogProduct, OrderDto, ...
 │       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
-│       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationOutbox   (ПР2)
+│       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
 │       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2)
 ├── internetshop-infrastructure/    pom.xml (-> application, domain)
 │   └── src/main/java/com/internetshop/infrastructure/
 │       ├── persistence/   FileProductStore, FileOrderStore, TextDataFile
 │       ├── integration/   CatalogProductAdapter
 │       ├── events/        InProcessEventBus                            (ПР2)
-│       └── notifications/ InMemoryNotificationOutbox                   (ПР2)
+│       ├── notifications/ InMemoryNotificationOutbox                   (ПР2)
+│       └── time/          SystemTimeProvider                           (ПР3)
 ├── internetshop-webapi/            pom.xml (-> application, infrastructure, domain; збирає internetshop.jar)
-│   ├── src/main/java/com/internetshop/webapi/   Main, InternetShopApp, http/, endpoints/
+│   ├── src/main/java/com/internetshop/webapi/   Main, InternetShopApp, http/ (Router, ErrorMapper, HttpResponses, ...), endpoints/
 │   └── src/main/resources/static/               index.html, app.js, styles.css
 ├── internetshop-checks/            pom.xml (-> усі модулі; запуск на mvn verify)
 │   └── src/main/java/com/internetshop/checks/Checks.java
 ├── .run/                           конфігурації запуску IntelliJ (InternetShop, Checks)
-├── docs/DEFENSE_NOTES.md           нотатки для підготовки до захисту
 └── run.ps1, check.ps1, demo.ps1
 ```
 
@@ -362,10 +416,14 @@ InternetShop/
 | ПР2: `record OrderCreated(...)` | `record OrderCreated`, `record OrderPlaced` |
 | ПР2: `_bus.PublishAsync(...)` у `CreateOrderHandler` | `events.publish(...)` в `OrderService.create` / `place` (синхронно) |
 | ПР2: `INotificationService`, `IAnalyticsService` | `OrderPlacedNotificationHandler`, `Order*StatisticsHandler` (реакції — окремі обробники) |
+| ПР3 SRP: `OrderService` / `OrderRepository` / `EmailService` | `OrderService` (сценарії) / `OrderMapper` (DTO) / `Router` + `ErrorMapper` + `HttpResponses` |
+| ПР3 DIP: `IOrderRepository` через конструктор замість `new SqlRepository()` | `TimeProvider`, `ProductQueries`, `OrderStore`, `EventBus` через конструктори; реалізації — в `InternetShopApp` |
+| ПР3 ISP: `IWorkable` + `IEatable` замість `IWorker` | `NotificationSender` + `NotificationFeed` замість `NotificationOutbox`; `ProductQueries` |
+| ПР3 OCP / LSP | Правила `ErrorMapper` (нове правило без зміни `Router`); правило для базового `NotFoundException` діє для підтипів |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
-роботи обробників подій (ПР2). Усі 68 перевірок проходять.
+роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) поведінка не змінилася. Усі 82 перевірки проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.
