@@ -1,9 +1,10 @@
-# InternetShop: Clean Architecture, DDD, Event-Driven Design та SOLID
+# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID та Dependency Injection
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
 - №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design));
-- №3 — **Принципи SOLID** (аналіз порушень і рефакторинг, див. [розділ ПР3](#практична-робота-3-принципи-solid)).
+- №3 — **Принципи SOLID** (аналіз порушень і рефакторинг, див. [розділ ПР3](#практична-робота-3-принципи-solid));
+- №4 — **Dependency Injection та інверсія керування** (DI-контейнер і життєві цикли, див. [розділ ПР4](#практична-робота-4-dependency-injection-та-інверсія-керування)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -103,9 +104,9 @@ Value Objects реалізовані як Java `record`: вони незмінн
 | Шар (модуль) | Компоненти | Відповідальність |
 |---|---|---|
 | **Domain** | `Product`, `ProductName`, `Order`, `OrderLine`, `Quantity`, `CustomerId`, `Money`, `Entity` | Модель і бізнес-правила. Лише JDK |
-| **Application** | `CatalogService`, `OrderService`, мапери DTO, інтерфейси `ProductStore`, `OrderStore`, `ProductCatalog`, `ProductQueries`, `TimeProvider`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
+| **Application** | `CatalogService`, `OrderService`, мапери DTO, інтерфейси `CatalogUseCases`, `OrderUseCases`, `ProductStore`, `OrderStore`, `ProductCatalog`, `ProductQueries`, `TimeProvider`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
 | **Infrastructure** | `FileProductStore`, `FileOrderStore`, `TextDataFile`, `CatalogProductAdapter`, `SystemTimeProvider` | Збереження у файли; адаптер між контекстами; системний час |
-| **WebApi** | `Main`, `InternetShopApp`, `Router`, `ErrorMapper`, `HttpResponses`, `Request`, `Json`, `*Endpoints`, статична сторінка | HTTP, JSON, складання залежностей, перетворення помилок на HTTP-статуси |
+| **WebApi** | `Main`, `InternetShopApp`, DI-контейнер `di/`, `Router`, `ErrorMapper`, `HttpResponses`, `Request`, `Json`, `*Endpoints`, статична сторінка | HTTP, JSON, складання залежностей (контейнер), перетворення помилок на HTTP-статуси |
 | Checks | `Checks` | Консольні перевірки (аналог `CourseDemo.Checks`) |
 
 Залежності між модулями задані в `pom.xml` кожного модуля (розділ `<dependencies>`); інший напрям не скомпілюється:
@@ -128,17 +129,16 @@ flowchart TB
 ```
 
 Інтерфейси сховищ належать **Application**, а реалізації — **Infrastructure** (інверсія залежностей).
-Конкретні реалізації обираються лише в точці складання `InternetShopApp.start` (Composition Root, аналог `Program.cs`):
+Конкретні реалізації обираються лише в точці складання `InternetShopApp.configureServices` (Composition Root, аналог `Program.cs`).
+З ПР4 там лише реєструються пари «абстракція → реалізація» з життєвим циклом, а об'єкти створює DI-контейнер:
 
 ```java
-ProductStore productStore = new FileProductStore(dataDirectory);
-OrderStore orderStore = new FileOrderStore(dataDirectory);
-CatalogService catalog = new CatalogService(productStore);
-ProductCatalog productCatalog = new CatalogProductAdapter(catalog); // Ordering -> Catalog
-OrderService orders = new OrderService(orderStore, productCatalog, eventBus, time); // ПР2 + ПР3
+services.addSingleton(OrderStore.class, s -> new FileOrderStore(dataDirectory));
+services.addScoped(CatalogUseCases.class, CatalogService.class);
+services.addScoped(ProductCatalog.class, CatalogProductAdapter.class); // Ordering -> Catalog
+services.addScoped(OrderUseCases.class, OrderService.class);           // ПР2 + ПР3 + ПР4
+services.addTransient(OrderMapper.class, OrderDtoMapper.class);
 ```
-
-DI-контейнера немає: залежності передаються через конструктори вручну.
 
 ### Як проходить додавання товару до замовлення
 
@@ -304,6 +304,69 @@ flowchart LR
 сценарії й адаптер можна перевірити із заглушками (фіксований час, тестовий каталог) без файлів і системного годинника;
 кожен клієнт бачить лише потрібні методи — адаптер не може видалити товар, а HTTP-маршрут не може створити сповіщення.
 
+## Практична робота №4: Dependency Injection та інверсія керування
+
+Завдання: проаналізувати залежності між компонентами, знайти випадки створення залежностей усередині класів,
+замінити їх на Dependency Injection, забезпечити залежність від абстракцій і налаштувати DI-контейнер із життєвими циклами.
+Оскільки ПР3 вже ввела DIP (`TimeProvider`, `ProductQueries`, `OrderStore`, `EventBus` через конструктори), ПР4 доповнює це
+**контейнером** (інверсія керування: об'єкти створює не код застосунку, а контейнер) і прибирає залишки статичних залежностей.
+Функціонал, HTTP API і формат даних не змінилися: 82 перевірки ПР1–ПР3 проходять (змінено лише виклики конструкторів), додано 19 нових.
+
+| Вимога методички | Реалізація |
+|---|---|
+| 1. Проаналізувати залежності між компонентами | Таблиця нижче |
+| 2. Виявити створення залежностей усередині класів | Статичні виклики `OrderMapper.toDto` / `ProductMapper.toDto` у сервісах; статичні `*Endpoints.register(router, service)`; ручне `new` усіх об'єктів у правильному порядку в `InternetShopApp` |
+| 3. Замінити пряме створення на DI | Мапери передаються в `OrderService` / `CatalogService` через конструктор; ендпоінти — звичайні класи з ін'єкцією через конструктор; усі об'єкти створює контейнер |
+| 4. Залежність від абстракцій | Нові інтерфейси `OrderMapper`, `ProductMapper`, `OrderUseCases`, `CatalogUseCases`, `SalesReport`; ендпоінти й сервіси мають у конструкторах лише інтерфейси |
+| 5. Налаштувати контейнер і життєві цикли | Пакет `webapi/di`: `ServiceCollection` (`addSingleton` / `addScoped` / `addTransient`), `ServiceProvider`, `ServiceScope`; область (scope) — один HTTP-запит |
+| 6. Перевірити працездатність | `mvn verify`: 101 перевірка (82 з ПР1–ПР3 + 19 нових), ручний запуск — без змін у поведінці |
+
+| Компонент | До ПР4 | Після ПР4 |
+|---|---|---|
+| `OrderService`, `CatalogService` | Статичні виклики `OrderMapper.toDto(...)`, `ProductMapper.toDto(...)` — жорстка прив'язка до конкретного класу | `OrderMapper` / `ProductMapper` — інтерфейси, реалізації `OrderDtoMapper` / `ProductDtoMapper` приходять через конструктор |
+| `ProductEndpoints`, `OrderEndpoints`, ... | Статичний метод `register(router, CatalogService)`: залежність від конкретного класу, один екземпляр на весь час роботи | Клас з конструктором `ProductEndpoints(CatalogUseCases)`; екземпляр на кожен запит створює контейнер (як контролер ASP.NET Core) |
+| `StatisticsEndpoints` | Залежав від класу `SalesStatistics` (з методами зміни статистики) | Залежить від інтерфейсу `SalesReport` (лише `snapshot()`) |
+| `InternetShopApp` | Вручну створював ~15 об'єктів через `new` у потрібному порядку | Лише реєстрації з життєвим циклом; граф об'єктів будує контейнер |
+| `Router` | Викликав готові лямбди | Створює область контейнера на кожен запит і отримує з неї ендпоінт |
+
+**Життєві цикли** (як у методичці: `AddTransient` / `AddScoped` / `AddSingleton`):
+
+| Lifetime | Компоненти | Чому |
+|---|---|---|
+| **Transient** | `OrderMapper`, `ProductMapper` | Легковагові, без стану — приклад з методички `AddTransient<IOrderMapper, OrderMapper>()` |
+| **Scoped** (один HTTP-запит) | `CatalogUseCases`/`ProductQueries` (`CatalogService`), `OrderUseCases` (`OrderService`), `ProductCatalog` (`CatalogProductAdapter`), усі `*Endpoints` | Сценарії одного запиту: усі компоненти запиту отримують той самий екземпляр, різні запити — різні |
+| **Singleton** | `EventBus` (`InProcessEventBus`), `ProductStore`, `OrderStore`, `TimeProvider`, `NotificationSender`/`NotificationFeed`, `SalesStatistics`/`SalesReport`, обробники подій, `ErrorMapper`, `Router` | Спільний стан або конфігурація застосунку. Шина — приклад з методички `AddSingleton<IEventBus, InProcessEventBus>()`. Файлові сховища тримають єдину копію даних у пам'яті й синхронізують запис, тому, на відміну від EF-репозиторіїв (Scoped через `DbContext`), вони Singleton |
+
+```mermaid
+flowchart LR
+    subgraph CompositionRoot[InternetShopApp.configureServices]
+        REG[addSingleton / addScoped / addTransient]
+    end
+    REG --> SP[ServiceProvider<br/>Singleton-кеш]
+    R[Router] -- createScope на кожен запит --> SC[ServiceScope<br/>Scoped-кеш]
+    SC --> SP
+    SC --> E[OrderEndpoints]
+    E --> OU[[OrderUseCases]]
+    OS[OrderService] -. implements .-> OU
+    OS --> OM[[OrderMapper]]
+    OS --> ST[[OrderStore]]
+    OS --> EB[[EventBus]]
+```
+
+Правила з методичних вказівок, які забезпечує код:
+- **ін'єкція через конструктор** — контейнер створює клас через його єдиний public-конструктор, отримуючи кожен параметр за типом;
+- **без статичних залежностей і сервіс-локатора** — мапери й ендпоінти більше не статичні; контейнер (`ServiceResolver`) бачать лише
+  `InternetShopApp` і `Router`, а Domain, Application, Infrastructure та ендпоінти його не імпортують (перевіряється в `Checks`; модуль Application
+  і не може його імпортувати — він не залежить від WebApi);
+- **розмежування життєвих циклів** — Scoped не можна отримати поза областю запиту, а Singleton, якому потрібна Scoped-залежність,
+  відхиляється з повідомленням на кшталт `SINGLETON X не може залежати від SCOPED Y` (помилка життєвого циклу з методички);
+  також виявляються незареєстровані залежності, цикли й повторні реєстрації;
+- **узгодженість із SOLID і Clean Architecture** — контейнер лежить у зовнішньому шарі (WebApi), внутрішні шари знають лише свої інтерфейси.
+
+Свідомо не змінено: `FileProductStore`/`FileOrderStore` створюють `TextDataFile` усередині — це приватна деталь формату файлу, а не замінна
+служба (замінюється все сховище через `ProductStore`/`OrderStore`); обробники подій залежать від класу `SalesStatistics` у тому ж пакеті Application —
+це модель для читання, яку вони оновлюють, без альтернативних реалізацій.
+
 ## Запуск
 
 Потрібен **JDK 21** або новіший і **Maven 3.9+** (у IntelliJ IDEA Maven вбудований).
@@ -316,12 +379,12 @@ flowchart LR
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 82 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 101 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 82 перевірки
+mvn verify                                         # збірка всіх модулів + 101 перевірка
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -359,6 +422,12 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
   обробник отримує лише `NotificationSender`, маршрут — лише `NotificationFeed` (ISP); підтипи `NotFoundException` → 404 одним правилом (LSP);
   новий тип винятку → HTTP-статус без змін у `Router`, неочікувана помилка → 500 без внутрішніх деталей (OCP);
   Application не читає системний годинник напряму, `Router` не імпортує класів Domain/Application.
+- **DI (ПР4):** життєві цикли з точки складання (мапери Transient, сценарії Scoped, шина і сховища Singleton);
+  Transient — новий екземпляр щоразу, Scoped — один на область і різні в різних областях, Singleton — один на застосунок;
+  кожен ендпоінт створюється контейнером з усіма залежностями; Scoped поза областю, Singleton → Scoped, незареєстрований тип,
+  цикл і повторна реєстрація відхиляються; через HTTP: одна область на запит, закривається після відповіді;
+  ендпоінти й сервіси мають у конструкторах лише інтерфейси; контейнер не імпортується поза `InternetShopApp`/`Router`,
+  сервіси, сховища й мапери не створюються через `new` усередині інших класів, мапери не викликаються статично.
 - **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
@@ -375,11 +444,11 @@ InternetShop/
 │   └── src/main/java/com/internetshop/application/
 │       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3)
 │       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
-│       ├── catalog/       CatalogService, ProductQueries, ProductMapper, ProductStore, ProductDto, ...
-│       ├── ordering/      OrderService, OrderMapper, OrderStore, ProductCatalog, CatalogProduct, OrderDto, ...
+│       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductStore, ProductDto, ...
+│       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderStore, ProductCatalog, CatalogProduct, OrderDto, ...
 │       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
 │       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
-│       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2)
+│       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2), SalesReport (ПР4)
 ├── internetshop-infrastructure/    pom.xml (-> application, domain)
 │   └── src/main/java/com/internetshop/infrastructure/
 │       ├── persistence/   FileProductStore, FileOrderStore, TextDataFile
@@ -389,6 +458,7 @@ InternetShop/
 │       └── time/          SystemTimeProvider                           (ПР3)
 ├── internetshop-webapi/            pom.xml (-> application, infrastructure, domain; збирає internetshop.jar)
 │   ├── src/main/java/com/internetshop/webapi/   Main, InternetShopApp, http/ (Router, ErrorMapper, HttpResponses, ...), endpoints/
+│   │   └── di/                                  ServiceCollection, ServiceProvider, ServiceScope, Lifetime, ... (ПР4)
 │   └── src/main/resources/static/               index.html, app.js, styles.css
 ├── internetshop-checks/            pom.xml (-> усі модулі; запуск на mvn verify)
 │   └── src/main/java/com/internetshop/checks/Checks.java
@@ -420,10 +490,14 @@ InternetShop/
 | ПР3 DIP: `IOrderRepository` через конструктор замість `new SqlRepository()` | `TimeProvider`, `ProductQueries`, `OrderStore`, `EventBus` через конструктори; реалізації — в `InternetShopApp` |
 | ПР3 ISP: `IWorkable` + `IEatable` замість `IWorker` | `NotificationSender` + `NotificationFeed` замість `NotificationOutbox`; `ProductQueries` |
 | ПР3 OCP / LSP | Правила `ErrorMapper` (нове правило без зміни `Router`); правило для базового `NotFoundException` діє для підтипів |
+| ПР4: вбудований DI-контейнер ASP.NET Core (`builder.Services`) | Власний мінімальний контейнер `webapi/di` (без фреймворків): `ServiceCollection` → `build()` → `ServiceProvider` |
+| ПР4: `AddTransient` / `AddScoped` / `AddSingleton` | `addTransient` / `addScoped` / `addSingleton` з тими самими правилами життєвого циклу |
+| ПР4: область на HTTP-запит, активація контролерів | `Router` створює `ServiceScope` на кожен запит і отримує з неї `*Endpoints` |
+| ПР4: `IOrderMapper` / `OrderMapper` | `OrderMapper` (інтерфейс) / `OrderDtoMapper` (реалізація) |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
-роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) поведінка не змінилася. Усі 82 перевірки проходять.
+роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) і переходу на DI-контейнер (ПР4) поведінка не змінилася. Усі 101 перевірка проходить.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.

@@ -2,8 +2,12 @@ package com.internetshop.checks;
 
 import com.internetshop.application.analytics.OrderCreatedStatisticsHandler;
 import com.internetshop.application.analytics.OrderPlacedStatisticsHandler;
+import com.internetshop.application.analytics.SalesReport;
 import com.internetshop.application.analytics.SalesStatistics;
 import com.internetshop.application.catalog.CatalogService;
+import com.internetshop.application.catalog.CatalogUseCases;
+import com.internetshop.application.catalog.ProductDtoMapper;
+import com.internetshop.application.catalog.ProductMapper;
 import com.internetshop.application.catalog.ProductDto;
 import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.catalog.ProductNotFoundException;
@@ -13,9 +17,12 @@ import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
 import com.internetshop.application.ordering.CatalogProduct;
 import com.internetshop.application.ordering.OrderDto;
+import com.internetshop.application.ordering.OrderDtoMapper;
 import com.internetshop.application.ordering.OrderMapper;
 import com.internetshop.application.ordering.OrderNotFoundException;
 import com.internetshop.application.ordering.OrderService;
+import com.internetshop.application.ordering.OrderStore;
+import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductNotInCatalogException;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
@@ -23,6 +30,7 @@ import com.internetshop.application.shared.events.Event;
 import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
+import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.domain.catalog.Product;
 import com.internetshop.domain.catalog.ProductName;
 import com.internetshop.domain.ordering.CustomerId;
@@ -38,14 +46,21 @@ import com.internetshop.infrastructure.persistence.FileOrderStore;
 import com.internetshop.infrastructure.persistence.FileProductStore;
 import com.internetshop.infrastructure.time.SystemTimeProvider;
 import com.internetshop.webapi.InternetShopApp;
+import com.internetshop.webapi.di.DependencyResolutionException;
+import com.internetshop.webapi.di.Lifetime;
+import com.internetshop.webapi.di.ServiceCollection;
+import com.internetshop.webapi.di.ServiceProvider;
+import com.internetshop.webapi.di.ServiceScope;
 import com.internetshop.webapi.endpoints.NotificationEndpoints;
+import com.internetshop.webapi.endpoints.OrderEndpoints;
+import com.internetshop.webapi.endpoints.ProductEndpoints;
+import com.internetshop.webapi.endpoints.StatisticsEndpoints;
 import com.internetshop.webapi.http.ErrorMapper;
 import com.internetshop.webapi.http.Router;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -60,15 +75,18 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
- * події та обробники (ПР2) -> принципи SOLID (ПР3) -> межі шарів і контекстів -> HTTP.
+ * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> межі шарів і контекстів -> HTTP.
  * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
  */
@@ -78,6 +96,9 @@ public final class Checks {
 
     /** Справжнє джерело часу для сценаріїв, де конкретний час неважливий. */
     private static final TimeProvider CLOCK = new SystemTimeProvider();
+    /** Мапери без стану: у перевірках, де сервіси збираються вручну, передаються так само через конструктор. */
+    private static final ProductMapper PRODUCT_MAPPER = new ProductDtoMapper();
+    private static final OrderMapper ORDER_MAPPER = new OrderDtoMapper();
 
     public static void main(String[] args) throws Exception {
         domainCatalog();
@@ -87,6 +108,7 @@ public final class Checks {
             persistenceAndContexts(tmp.resolve("store"));
             events(tmp.resolve("events"));
             solid(tmp.resolve("solid"));
+            dependencyInjection(tmp.resolve("di"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
         } finally {
@@ -140,17 +162,17 @@ public final class Checks {
     // ---------------- Application + Infrastructure + взаємодія контекстів ----------------
 
     private static void persistenceAndContexts(Path dir) {
-        CatalogService catalog = new CatalogService(new FileProductStore(dir));
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), new InProcessEventBus(), CLOCK);
+        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
         UUID productId = catalog.create("Ноутбук", "14 дюймів", new BigDecimal("30000")).id();
         UUID orderId = orders.create(UUID.randomUUID()).id();
         orders.addItem(orderId, productId, 1);
         orders.place(orderId);
 
         // Нові екземпляри сховищ = «перезапуск застосунку»: дані читаються з файлів.
-        CatalogService catalog2 = new CatalogService(new FileProductStore(dir));
+        CatalogService catalog2 = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
         FileOrderStore orderStore2 = new FileOrderStore(dir);
-        OrderService orders2 = new OrderService(orderStore2, new CatalogProductAdapter(catalog2), new InProcessEventBus(), CLOCK);
+        OrderService orders2 = new OrderService(orderStore2, new CatalogProductAdapter(catalog2), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
         OrderDto saved = orders2.get(orderId);
         check(catalog2.get(productId).name().equals("Ноутбук")
                 && saved.status().equals("PLACED") && saved.lines().size() == 1
@@ -176,7 +198,7 @@ public final class Checks {
         // Видалення товару з каталогу (Catalog) не змінює вже сформовані замовлення (Ordering).
         catalog2.delete(productId);
         expect(ProductNotFoundException.class, () -> catalog2.get(productId), "Deleted product is no longer in catalog");
-        check(new CatalogService(new FileProductStore(dir)).list().stream().noneMatch(p -> p.id().equals(productId)),
+        check(new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER).list().stream().noneMatch(p -> p.id().equals(productId)),
                 "Product deletion survives restart");
         check(orders2.get(orderId).lines().get(0).productName().equals("Ноутбук"),
                 "Existing order keeps its snapshot after product deletion");
@@ -189,11 +211,11 @@ public final class Checks {
     // ---------------- ПР2: події та обробники (Event-Driven) ----------------
 
     private static void events(Path dir) {
-        CatalogService catalog = new CatalogService(new FileProductStore(dir));
+        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add); // «спостерігач» за всіма подіями — лише для перевірок
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, CLOCK);
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, CLOCK, ORDER_MAPPER);
 
         UUID productId = catalog.create("Миша", "", new BigDecimal("100.50")).id();
         UUID customerId = UUID.randomUUID();
@@ -236,7 +258,7 @@ public final class Checks {
         bus2.subscribe(OrderPlaced.class, e -> { throw new IllegalStateException("handler failure"); });
         bus2.subscribe(OrderPlaced.class, new OrderPlacedNotificationHandler(outbox2));
         bus2.subscribe(OrderPlaced.class, new OrderPlacedStatisticsHandler(stats2));
-        OrderService orders2 = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus2, CLOCK);
+        OrderService orders2 = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus2, CLOCK, ORDER_MAPPER);
         UUID order2 = orders2.create(customerId).id();
         orders2.addItem(order2, productId, 1);
         Logger busLog = Logger.getLogger(InProcessEventBus.class.getName());
@@ -265,7 +287,7 @@ public final class Checks {
         Order order = new Order(new CustomerId(UUID.randomUUID()));
         UUID mouse = UUID.randomUUID();
         order.addItem(mouse, "Миша", Money.of("100.50"), new Quantity(2));
-        OrderDto dto = OrderMapper.toDto(order);
+        OrderDto dto = ORDER_MAPPER.toDto(order);
         check(dto.id().equals(order.getId()) && dto.status().equals("DRAFT") && dto.lines().size() == 1
                         && dto.lines().get(0).productId().equals(mouse) && dto.lines().get(0).lineTotal().compareTo(new BigDecimal("201")) == 0
                         && dto.total().compareTo(new BigDecimal("201")) == 0,
@@ -275,18 +297,18 @@ public final class Checks {
 
         // DIP: усі залежності OrderService — абстракції, які передаються через конструктор.
         Constructor<?>[] ctors = OrderService.class.getConstructors();
-        check(ctors.length == 1 && ctors[0].getParameterCount() == 4
+        check(ctors.length == 1 && ctors[0].getParameterCount() == 5
                         && Arrays.stream(ctors[0].getParameterTypes()).allMatch(Class::isInterface),
                 "DIP: OrderService depends only on interfaces injected through its constructor");
 
         // DIP: час події задає підставлена реалізація TimeProvider, а не системний годинник.
         Instant fixed = Instant.parse("2026-01-01T10:00:00Z");
-        CatalogService catalog = new CatalogService(new FileProductStore(dir));
+        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
         UUID productId = catalog.create("Кабель", "", new BigDecimal("199")).id();
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add);
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, () -> fixed);
+        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, () -> fixed, ORDER_MAPPER);
         UUID orderId = orders.create(UUID.randomUUID()).id();
         orders.addItem(orderId, productId, 1);
         orders.place(orderId);
@@ -314,8 +336,8 @@ public final class Checks {
         check(Arrays.equals(OrderPlacedNotificationHandler.class.getConstructors()[0].getParameterTypes(),
                         new Class<?>[]{NotificationSender.class}) && NotificationSender.class.getMethods().length == 1,
                 "ISP: notification handler gets only NotificationSender (cannot read notifications)");
-        Method register = NotificationEndpoints.class.getMethod("register", Router.class, NotificationFeed.class);
-        check(register.getParameterTypes()[1] == NotificationFeed.class && NotificationFeed.class.getMethods().length == 1,
+        check(Arrays.equals(NotificationEndpoints.class.getConstructors()[0].getParameterTypes(),
+                        new Class<?>[]{NotificationFeed.class}) && NotificationFeed.class.getMethods().length == 1,
                 "ISP: GET /notifications gets only read-only NotificationFeed");
         InMemoryNotificationOutbox outbox = new InMemoryNotificationOutbox();
         NotificationSender sender = outbox;
@@ -334,7 +356,7 @@ public final class Checks {
         final class OutOfStockException extends RuntimeException {
             OutOfStockException() { super("Немає на складі."); }
         }
-        Router router = new Router(new ErrorMapper().map(OutOfStockException.class, 422))
+        Router router = new Router(new ErrorMapper().map(OutOfStockException.class, 422), new ServiceCollection().build())
                 .route("GET", "/new-rule", req -> { throw new OutOfStockException(); })
                 .route("GET", "/unexpected", req -> { throw new IllegalStateException("internal-secret-detail"); });
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
@@ -356,6 +378,131 @@ public final class Checks {
             routerLog.setLevel(previous);
             server.stop(0);
         }
+    }
+
+    // ---------------- ПР4: Dependency Injection і життєві цикли ----------------
+
+    /** Стан «одного запиту» для перевірок області (scope): рахує створення і закриття. */
+    public static final class RequestState implements AutoCloseable {
+        static final AtomicInteger CREATED = new AtomicInteger();
+        static final AtomicInteger CLOSED = new AtomicInteger();
+        public RequestState() { CREATED.incrementAndGet(); }
+        @Override public void close() { CLOSED.incrementAndGet(); }
+    }
+
+    /** Ще один компонент запиту, який теж залежить від RequestState. */
+    public static final class RequestStateUser {
+        final RequestState state;
+        public RequestStateUser(RequestState state) { this.state = state; }
+    }
+
+    /** Ендпоінт для перевірки: отримує обидві залежності через конструктор. */
+    public static final class ProbeEndpoint {
+        final RequestState state;
+        final RequestStateUser user;
+        public ProbeEndpoint(RequestState state, RequestStateUser user) { this.state = state; this.user = user; }
+    }
+
+    public static final class CycleA { public CycleA(CycleB b) { } }
+
+    public static final class CycleB { public CycleB(CycleA a) { } }
+
+    private static void dependencyInjection(Path dir) throws Exception {
+        ServiceProvider services = InternetShopApp.configureServices(dir);
+
+        // Життєві цикли, налаштовані в точці складання, — як у прикладах методички.
+        check(services.lifetimeOf(OrderMapper.class) == Lifetime.TRANSIENT && services.lifetimeOf(ProductMapper.class) == Lifetime.TRANSIENT
+                        && services.lifetimeOf(OrderUseCases.class) == Lifetime.SCOPED && services.lifetimeOf(CatalogUseCases.class) == Lifetime.SCOPED
+                        && services.lifetimeOf(EventBus.class) == Lifetime.SINGLETON && services.lifetimeOf(OrderStore.class) == Lifetime.SINGLETON,
+                "DI: mappers Transient, use cases Scoped, event bus and stores Singleton");
+
+        try (ServiceScope request1 = services.createScope(); ServiceScope request2 = services.createScope()) {
+            check(request1.get(OrderMapper.class) != request1.get(OrderMapper.class),
+                    "Transient: a new instance on every request to the container");
+            check(request1.get(OrderUseCases.class) == request1.get(OrderUseCases.class)
+                            && request1.get(OrderUseCases.class) != request2.get(OrderUseCases.class),
+                    "Scoped: one instance within a scope, different instances in different scopes");
+            check(request1.get(ProductQueries.class) == request1.get(CatalogUseCases.class),
+                    "Scoped: all components of one request share the same CatalogService");
+            check(request1.get(EventBus.class) == request2.get(EventBus.class) && request1.get(EventBus.class) == services.get(EventBus.class)
+                            && services.get(EventBus.class) == services.get(InProcessEventBus.class),
+                    "Singleton: one event bus for the whole application (publish and subscribe see the same bus)");
+            check(services.get(NotificationSender.class) == services.get(NotificationFeed.class)
+                            && services.get(SalesReport.class) == services.get(SalesStatistics.class),
+                    "Singleton: one shared instance behind several narrow interfaces");
+            check(request1.get(ProductEndpoints.class) != null && request1.get(OrderEndpoints.class) != null
+                            && request1.get(NotificationEndpoints.class) != null && request1.get(StatisticsEndpoints.class) != null,
+                    "Container configuration is complete: every endpoint is created with all its dependencies");
+        }
+
+        // Контейнер сам будує граф: сценарій, отриманий з області, працює з реальними залежностями.
+        try (ServiceScope scope = services.createScope()) {
+            UUID productId = scope.get(CatalogUseCases.class).create("Кабель", "", new BigDecimal("199")).id();
+            OrderUseCases orders = scope.get(OrderUseCases.class);
+            UUID orderId = orders.create(UUID.randomUUID()).id();
+            check(orders.addItem(orderId, productId, 2).total().compareTo(new BigDecimal("398")) == 0,
+                    "Use case resolved from the container works end to end");
+        }
+
+        // Правила життєвого циклу перевіряє контейнер.
+        expect(DependencyResolutionException.class, () -> services.get(OrderUseCases.class),
+                "Scoped dependency cannot be taken from the root container (outside a request)");
+        ServiceProvider captive = new ServiceCollection()
+                .addScoped(SalesStatistics.class, SalesStatistics.class)
+                .addSingleton(OrderCreatedStatisticsHandler.class, OrderCreatedStatisticsHandler.class)
+                .build();
+        try {
+            captive.get(OrderCreatedStatisticsHandler.class);
+            throw new AssertionError("FAIL: singleton received a scoped dependency");
+        } catch (DependencyResolutionException e) {
+            check(e.getMessage().contains("SINGLETON OrderCreatedStatisticsHandler") && e.getMessage().contains("SCOPED SalesStatistics"),
+                    "Singleton depending on Scoped is rejected with a clear message");
+        }
+        ServiceProvider incomplete = new ServiceCollection().addScoped(OrderUseCases.class, OrderService.class).build();
+        try (ServiceScope scope = incomplete.createScope()) {
+            expect(DependencyResolutionException.class, () -> scope.get(OrderUseCases.class),
+                    "Missing registration reported instead of a hidden new inside the class");
+        }
+        ServiceProvider cycle = new ServiceCollection()
+                .addTransient(CycleA.class, CycleA.class).addTransient(CycleB.class, CycleB.class).build();
+        expect(DependencyResolutionException.class, () -> cycle.get(CycleA.class), "Circular dependency detected");
+        expect(IllegalArgumentException.class, () -> new ServiceCollection()
+                        .addTransient(OrderMapper.class, OrderDtoMapper.class).addTransient(OrderMapper.class, OrderDtoMapper.class),
+                "Duplicate registration rejected");
+
+        // Область запиту: Router створює її на кожен HTTP-запит і закриває після відповіді.
+        ServiceProvider probe = new ServiceCollection()
+                .addScoped(RequestState.class, RequestState.class)
+                .addScoped(RequestStateUser.class, RequestStateUser.class)
+                .addScoped(ProbeEndpoint.class, ProbeEndpoint.class)
+                .build();
+        Router router = new Router(new ErrorMapper(), probe)
+                .route("GET", "/probe", ProbeEndpoint.class, (endpoint, req) ->
+                        Router.Response.ok(Map.of("same", endpoint.state == endpoint.user.state)));
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", router);
+        server.start();
+        try {
+            String url = "http://localhost:" + server.getAddress().getPort() + "/probe";
+            HttpClient client = HttpClient.newHttpClient();
+            int createdBefore = RequestState.CREATED.get();
+            int closedBefore = RequestState.CLOSED.get();
+            HttpResponse<String> first = send(client, "GET", url, null, null);
+            HttpResponse<String> second = send(client, "GET", url, null, null);
+            check(first.body().contains("\"same\":true") && second.body().contains("\"same\":true"),
+                    "HTTP: within one request all components get the same scoped instance");
+            check(RequestState.CREATED.get() - createdBefore == 2 && RequestState.CLOSED.get() - closedBefore == 2,
+                    "HTTP: each request gets its own scope, closed after the response");
+        } finally {
+            server.stop(0);
+        }
+
+        // Ендпоінти і сценарії залежать лише від абстракцій, переданих через конструктор.
+        List<Class<?>> components = List.of(ProductEndpoints.class, OrderEndpoints.class, NotificationEndpoints.class,
+                StatisticsEndpoints.class, CatalogService.class, OrderService.class, CatalogProductAdapter.class);
+        check(components.stream().allMatch(c -> c.getConstructors().length == 1
+                        && Arrays.stream(c.getConstructors()[0].getParameterTypes()).allMatch(Class::isInterface)),
+                "Endpoints and use cases depend only on interfaces injected through the constructor");
     }
 
     // ---------------- Межі шарів і bounded contexts ----------------
@@ -399,6 +546,26 @@ public final class Checks {
         check(Files.readAllLines(router).stream().map(String::trim).filter(l -> l.startsWith("import "))
                         .noneMatch(i -> i.contains("com.internetshop.domain") || i.contains("com.internetshop.application")),
                 "OCP: Router does not reference Domain/Application exceptions (rules live in ErrorMapper)");
+
+        // ПР4: контейнер не передається в бізнес-логіку, а залежності не створюються всередині класів.
+        Path webapi = root.resolve("internetshop-webapi/src/main/java/com/internetshop/webapi");
+        Path infrastructure = root.resolve("internetshop-infrastructure/src/main/java");
+        List<String> outsideRoot = new ArrayList<>(importsOf(domain));
+        outsideRoot.addAll(importsOf(application));
+        outsideRoot.addAll(importsOf(infrastructure));
+        outsideRoot.addAll(importsOf(webapi.resolve("endpoints")));
+        check(outsideRoot.stream().noneMatch(i -> i.startsWith("com.internetshop.webapi.di")),
+                "DI: the container is used only in the composition root and Router, not in business logic or endpoints");
+        List<String> components = new ArrayList<>(sourcesOf(application));
+        components.addAll(sourcesOf(infrastructure));
+        components.addAll(sourcesOf(webapi.resolve("endpoints")));
+        components.addAll(sourcesOf(webapi.resolve("http")));
+        Pattern directCreation = Pattern.compile("new \\w*(Service|Store|Adapter|Mapper|EventBus|Provider|Outbox|Statistics|Handler)\\(");
+        check(components.stream().noneMatch(src -> directCreation.matcher(src).find()),
+                "DI: services, stores, adapters and mappers are not created with new inside other classes");
+        check(sourcesOf(application).stream().noneMatch(src -> src.contains("Mapper.toDto(") || src.contains("Mapper::toDto"))
+                        && ProductMapper.class.isInterface() && OrderMapper.class.isInterface(),
+                "DI: mappers are injected abstractions, not static calls");
     }
 
     private static List<String> sourcesOf(Path dir) throws IOException {

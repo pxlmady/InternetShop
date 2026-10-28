@@ -2,23 +2,33 @@ package com.internetshop.webapi.endpoints;
 
 import com.internetshop.application.notifications.Notification;
 import com.internetshop.application.notifications.NotificationFeed;
+import com.internetshop.webapi.http.Request;
 import com.internetshop.webapi.http.Router;
 import com.internetshop.webapi.http.Router.Response;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * HTTP-маршрут для перегляду сповіщень, створених обробником події OrderPlaced. Лише читання:
  * маршрут отримує вузький контракт NotificationFeed, тож створити сповіщення через нього неможливо (ПР3, ISP).
+ * ПР4 (DI): NotificationFeed передається через конструктор; сама стрічка — Singleton, ендпоінт — Scoped.
  */
 public final class NotificationEndpoints {
 
-    private NotificationEndpoints() { }
+    private final NotificationFeed feed;
 
-    public static void register(Router router, NotificationFeed feed) {
-        router.route("GET", "/notifications", req -> Response.ok(feed.findRecent().stream()
-                .map(NotificationEndpoints::json).toList()));
+    public NotificationEndpoints(NotificationFeed feed) {
+        this.feed = Objects.requireNonNull(feed);
+    }
+
+    public static void map(Router router) {
+        router.route("GET", "/notifications", NotificationEndpoints.class, NotificationEndpoints::recent);
+    }
+
+    Response recent(Request req) {
+        return Response.ok(feed.findRecent().stream().map(NotificationEndpoints::json).toList());
     }
 
     private static Map<String, Object> json(Notification n) {

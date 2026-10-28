@@ -1,5 +1,7 @@
 package com.internetshop.webapi.http;
 
+import com.internetshop.webapi.di.ServiceScope;
+import com.internetshop.webapi.di.ServiceScopeFactory;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -10,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -22,6 +25,11 @@ import java.util.regex.Pattern;
  * ПР3 (SOLID): Router лише знаходить маршрут і викликає обробник (SRP). Які винятки якому статусу
  * відповідають, вирішує ErrorMapper, переданий через конструктор (OCP + DIP), — тому Router не знає
  * класів Domain/Application. Запис відповідей і заголовків безпеки — у HttpResponses (SRP).
+ * <p>
+ * ПР4 (DI): для кожного HTTP-запиту Router створює окрему область контейнера (scope) через абстракцію
+ * ServiceScopeFactory і отримує з неї клас-ендпоінт разом з усіма його залежностями (аналог активації
+ * контролерів в ASP.NET Core). Тому Scoped-залежності живуть рівно один запит, а ендпоінти й сервіси
+ * не знають про контейнер — вони лише отримують абстракції через конструктор.
  */
 public final class Router implements HttpHandler {
 
@@ -34,18 +42,41 @@ public final class Router implements HttpHandler {
         public static Response noContent() { return new Response(204, null); }
     }
 
-    private record Route(String method, Pattern pattern, List<String> params, Function<Request, Response> handler) { }
+    /** Обробник маршруту отримує область поточного запиту, щоб з неї створити клас-ендпоінт. */
+    private interface Handler {
+        Response handle(ServiceScope scope, Request request);
+    }
+
+    private record Route(String method, Pattern pattern, List<String> params, Handler handler) { }
 
     private final List<Route> routes = new ArrayList<>();
     private final Map<String, String> staticFiles = new HashMap<>();
     private final ErrorMapper errors;
+    private final ServiceScopeFactory scopes;
 
-    public Router(ErrorMapper errors) {
+    public Router(ErrorMapper errors, ServiceScopeFactory scopes) {
         this.errors = Objects.requireNonNull(errors);
+        this.scopes = Objects.requireNonNull(scopes);
+    }
+
+    /**
+     * Маршрут, який обробляє клас-ендпоінт: на кожен запит його екземпляр отримується з області запиту,
+     * тобто контейнер сам створює ендпоінт і передає в конструктор усі залежності.
+     */
+    public <E> Router route(String method, String template, Class<E> endpoint, BiFunction<E, Request, Response> action) {
+        Objects.requireNonNull(endpoint);
+        Objects.requireNonNull(action);
+        return add(method, template, (scope, request) -> action.apply(scope.get(endpoint), request));
+    }
+
+    /** Простий маршрут без залежностей. */
+    public Router route(String method, String template, Function<Request, Response> handler) {
+        Objects.requireNonNull(handler);
+        return add(method, template, (scope, request) -> handler.apply(request));
     }
 
     /** Шаблон на кшталт /orders/{id}/items; параметри — сегменти без «/». */
-    public Router route(String method, String template, Function<Request, Response> handler) {
+    private Router add(String method, String template, Handler handler) {
         List<String> params = new ArrayList<>();
         Matcher m = Pattern.compile("\\{(\\w+)}").matcher(template);
         StringBuilder regex = new StringBuilder();
@@ -86,7 +117,11 @@ public final class Router implements HttpHandler {
                     Map<String, String> params = new HashMap<>();
                     for (int i = 0; i < route.params().size(); i++) params.put(route.params().get(i), m.group(i + 1));
                     if (method.equals("POST")) requireJson(exchange);
-                    Response r = route.handler().apply(new Request(exchange, params));
+                    Response r;
+                    // Одна область (scope) на один HTTP-запит; після відповіді вона закривається.
+                    try (ServiceScope scope = scopes.createScope()) {
+                        r = route.handler().handle(scope, new Request(exchange, params));
+                    }
                     if (r.status() == 204) HttpResponses.empty(exchange, 204); // 204: відповідь без тіла
                     else HttpResponses.json(exchange, r.status(), r.body());
                     return;

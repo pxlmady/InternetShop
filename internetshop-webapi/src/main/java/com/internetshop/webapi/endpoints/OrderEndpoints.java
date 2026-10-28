@@ -2,25 +2,53 @@ package com.internetshop.webapi.endpoints;
 
 import com.internetshop.application.ordering.OrderDto;
 import com.internetshop.application.ordering.OrderLineDto;
-import com.internetshop.application.ordering.OrderService;
+import com.internetshop.application.ordering.OrderUseCases;
+import com.internetshop.webapi.http.Request;
 import com.internetshop.webapi.http.Router;
 import com.internetshop.webapi.http.Router.Response;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
-/** HTTP-маршрути контексту Ordering. Делегують сценарії OrderService. */
+/**
+ * HTTP-маршрути контексту Ordering. Делегують сценарії замовлень.
+ * ПР4 (DI): залежність від абстракції OrderUseCases через конструктор; екземпляр створює контейнер (Scoped).
+ */
 public final class OrderEndpoints {
 
-    private OrderEndpoints() { }
+    private final OrderUseCases orders;
 
-    public static void register(Router router, OrderService orders) {
-        router.route("GET", "/orders", req -> Response.ok(orders.list().stream().map(OrderEndpoints::json).toList()));
-        router.route("GET", "/orders/{id}", req -> Response.ok(json(orders.get(req.pathId("id")))));
-        router.route("POST", "/orders", req -> Response.created(json(orders.create(req.uuid("customerId")))));
-        router.route("POST", "/orders/{id}/items", req -> Response.ok(json(
-                orders.addItem(req.pathId("id"), req.uuid("productId"), req.integer("quantity")))));
-        router.route("POST", "/orders/{id}/place", req -> Response.ok(json(orders.place(req.pathId("id")))));
+    public OrderEndpoints(OrderUseCases orders) {
+        this.orders = Objects.requireNonNull(orders);
+    }
+
+    public static void map(Router router) {
+        router.route("GET", "/orders", OrderEndpoints.class, OrderEndpoints::list);
+        router.route("GET", "/orders/{id}", OrderEndpoints.class, OrderEndpoints::get);
+        router.route("POST", "/orders", OrderEndpoints.class, OrderEndpoints::create);
+        router.route("POST", "/orders/{id}/items", OrderEndpoints.class, OrderEndpoints::addItem);
+        router.route("POST", "/orders/{id}/place", OrderEndpoints.class, OrderEndpoints::place);
+    }
+
+    Response list(Request req) {
+        return Response.ok(orders.list().stream().map(OrderEndpoints::json).toList());
+    }
+
+    Response get(Request req) {
+        return Response.ok(json(orders.get(req.pathId("id"))));
+    }
+
+    Response create(Request req) {
+        return Response.created(json(orders.create(req.uuid("customerId"))));
+    }
+
+    Response addItem(Request req) {
+        return Response.ok(json(orders.addItem(req.pathId("id"), req.uuid("productId"), req.integer("quantity"))));
+    }
+
+    Response place(Request req) {
+        return Response.ok(json(orders.place(req.pathId("id"))));
     }
 
     static Map<String, Object> json(OrderDto o) {
