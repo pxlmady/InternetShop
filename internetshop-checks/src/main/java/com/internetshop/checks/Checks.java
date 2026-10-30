@@ -10,6 +10,7 @@ import com.internetshop.application.catalog.ProductDtoMapper;
 import com.internetshop.application.catalog.ProductMapper;
 import com.internetshop.application.catalog.ProductDto;
 import com.internetshop.application.catalog.ProductQueries;
+import com.internetshop.application.catalog.ProductRepository;
 import com.internetshop.application.catalog.ProductNotFoundException;
 import com.internetshop.application.notifications.Notification;
 import com.internetshop.application.notifications.NotificationFeed;
@@ -21,7 +22,7 @@ import com.internetshop.application.ordering.OrderDtoMapper;
 import com.internetshop.application.ordering.OrderMapper;
 import com.internetshop.application.ordering.OrderNotFoundException;
 import com.internetshop.application.ordering.OrderService;
-import com.internetshop.application.ordering.OrderStore;
+import com.internetshop.application.ordering.OrderRepository;
 import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductNotInCatalogException;
 import com.internetshop.application.ordering.events.OrderCreated;
@@ -30,6 +31,7 @@ import com.internetshop.application.shared.events.Event;
 import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
+import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.domain.catalog.Product;
 import com.internetshop.domain.catalog.ProductName;
@@ -42,8 +44,10 @@ import com.internetshop.domain.shared.Money;
 import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
 import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
-import com.internetshop.infrastructure.persistence.FileOrderStore;
-import com.internetshop.infrastructure.persistence.FileProductStore;
+import com.internetshop.infrastructure.persistence.FileDataContext;
+import com.internetshop.infrastructure.persistence.FileOrderRepository;
+import com.internetshop.infrastructure.persistence.FileProductRepository;
+import com.internetshop.infrastructure.persistence.FileUnitOfWork;
 import com.internetshop.infrastructure.time.SystemTimeProvider;
 import com.internetshop.webapi.InternetShopApp;
 import com.internetshop.webapi.di.DependencyResolutionException;
@@ -100,6 +104,19 @@ public final class Checks {
     private static final ProductMapper PRODUCT_MAPPER = new ProductDtoMapper();
     private static final OrderMapper ORDER_MAPPER = new OrderDtoMapper();
 
+    /** Сценарій каталогу поза контейнером («один запит»): свій Unit of Work і репозиторій над спільним контекстом даних. */
+    private static CatalogService catalogService(FileDataContext db) {
+        FileUnitOfWork unitOfWork = new FileUnitOfWork(db);
+        return new CatalogService(new FileProductRepository(db, unitOfWork), unitOfWork, PRODUCT_MAPPER);
+    }
+
+    /** Сценарії замовлень поза контейнером: так само власний Unit of Work і репозиторій. */
+    private static OrderService orderService(FileDataContext db, ProductQueries catalog, EventBus bus, TimeProvider time) {
+        FileUnitOfWork unitOfWork = new FileUnitOfWork(db);
+        return new OrderService(new FileOrderRepository(db, unitOfWork), unitOfWork, new CatalogProductAdapter(catalog),
+                bus, time, ORDER_MAPPER);
+    }
+
     public static void main(String[] args) throws Exception {
         domainCatalog();
         domainOrdering();
@@ -109,6 +126,7 @@ public final class Checks {
             events(tmp.resolve("events"));
             solid(tmp.resolve("solid"));
             dependencyInjection(tmp.resolve("di"));
+            repositoryAndUnitOfWork(tmp.resolve("uow"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
         } finally {
@@ -162,17 +180,18 @@ public final class Checks {
     // ---------------- Application + Infrastructure + взаємодія контекстів ----------------
 
     private static void persistenceAndContexts(Path dir) {
-        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
+        FileDataContext db = new FileDataContext(dir);
+        CatalogService catalog = catalogService(db);
+        OrderService orders = orderService(db, catalog, new InProcessEventBus(), CLOCK);
         UUID productId = catalog.create("Ноутбук", "14 дюймів", new BigDecimal("30000")).id();
         UUID orderId = orders.create(UUID.randomUUID()).id();
         orders.addItem(orderId, productId, 1);
         orders.place(orderId);
 
-        // Нові екземпляри сховищ = «перезапуск застосунку»: дані читаються з файлів.
-        CatalogService catalog2 = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
-        FileOrderStore orderStore2 = new FileOrderStore(dir);
-        OrderService orders2 = new OrderService(orderStore2, new CatalogProductAdapter(catalog2), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
+        // Новий контекст даних = «перезапуск застосунку»: дані читаються з файлів.
+        FileDataContext db2 = new FileDataContext(dir);
+        CatalogService catalog2 = catalogService(db2);
+        OrderService orders2 = orderService(db2, catalog2, new InProcessEventBus(), CLOCK);
         OrderDto saved = orders2.get(orderId);
         check(catalog2.get(productId).name().equals("Ноутбук")
                 && saved.status().equals("PLACED") && saved.lines().size() == 1
@@ -186,19 +205,25 @@ public final class Checks {
                 "Ordering asks Catalog through ProductCatalog contract: unknown product rejected");
         expect(DomainRuleException.class, () -> orders2.create(null), "Missing customer id rejected by domain");
 
-        // Імітуємо два запити, які одночасно прочитали ту саму чернетку.
-        Order first = orderStore2.findById(draftId).orElseThrow();
-        Order second = orderStore2.findById(draftId).orElseThrow();
+        // Імітуємо два запити (кожен зі своїм Unit of Work), які одночасно прочитали ту саму чернетку.
+        FileUnitOfWork request1 = new FileUnitOfWork(db2);
+        FileUnitOfWork request2 = new FileUnitOfWork(db2);
+        OrderRepository repository1 = new FileOrderRepository(db2, request1);
+        OrderRepository repository2 = new FileOrderRepository(db2, request2);
+        Order first = repository1.findById(draftId).orElseThrow();
+        Order second = repository2.findById(draftId).orElseThrow();
         first.addItem(productId, "Ноутбук", Money.of("30000"), new Quantity(1));
         second.addItem(productId, "Ноутбук", Money.of("30000"), new Quantity(2));
-        orderStore2.update(first);
-        expect(ConcurrentChangeException.class, () -> orderStore2.update(second), "Concurrent update rejected (optimistic version)");
+        repository1.update(first);
+        request1.saveChanges();
+        repository2.update(second);
+        expect(ConcurrentChangeException.class, request2::saveChanges, "Concurrent update rejected (optimistic version)");
         check(orders2.get(draftId).lines().get(0).quantity() == 1, "Failed concurrent update leaves first result intact");
 
         // Видалення товару з каталогу (Catalog) не змінює вже сформовані замовлення (Ordering).
         catalog2.delete(productId);
         expect(ProductNotFoundException.class, () -> catalog2.get(productId), "Deleted product is no longer in catalog");
-        check(new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER).list().stream().noneMatch(p -> p.id().equals(productId)),
+        check(catalogService(new FileDataContext(dir)).list().stream().noneMatch(p -> p.id().equals(productId)),
                 "Product deletion survives restart");
         check(orders2.get(orderId).lines().get(0).productName().equals("Ноутбук"),
                 "Existing order keeps its snapshot after product deletion");
@@ -211,11 +236,12 @@ public final class Checks {
     // ---------------- ПР2: події та обробники (Event-Driven) ----------------
 
     private static void events(Path dir) {
-        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
+        FileDataContext db = new FileDataContext(dir);
+        CatalogService catalog = catalogService(db);
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add); // «спостерігач» за всіма подіями — лише для перевірок
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, CLOCK, ORDER_MAPPER);
+        OrderService orders = orderService(db, catalog, bus, CLOCK);
 
         UUID productId = catalog.create("Миша", "", new BigDecimal("100.50")).id();
         UUID customerId = UUID.randomUUID();
@@ -258,7 +284,7 @@ public final class Checks {
         bus2.subscribe(OrderPlaced.class, e -> { throw new IllegalStateException("handler failure"); });
         bus2.subscribe(OrderPlaced.class, new OrderPlacedNotificationHandler(outbox2));
         bus2.subscribe(OrderPlaced.class, new OrderPlacedStatisticsHandler(stats2));
-        OrderService orders2 = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus2, CLOCK, ORDER_MAPPER);
+        OrderService orders2 = orderService(db, catalog, bus2, CLOCK);
         UUID order2 = orders2.create(customerId).id();
         orders2.addItem(order2, productId, 1);
         Logger busLog = Logger.getLogger(InProcessEventBus.class.getName());
@@ -297,18 +323,19 @@ public final class Checks {
 
         // DIP: усі залежності OrderService — абстракції, які передаються через конструктор.
         Constructor<?>[] ctors = OrderService.class.getConstructors();
-        check(ctors.length == 1 && ctors[0].getParameterCount() == 5
+        check(ctors.length == 1 && ctors[0].getParameterCount() == 6
                         && Arrays.stream(ctors[0].getParameterTypes()).allMatch(Class::isInterface),
                 "DIP: OrderService depends only on interfaces injected through its constructor");
 
         // DIP: час події задає підставлена реалізація TimeProvider, а не системний годинник.
         Instant fixed = Instant.parse("2026-01-01T10:00:00Z");
-        CatalogService catalog = new CatalogService(new FileProductStore(dir), PRODUCT_MAPPER);
+        FileDataContext db = new FileDataContext(dir);
+        CatalogService catalog = catalogService(db);
         UUID productId = catalog.create("Кабель", "", new BigDecimal("199")).id();
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add);
-        OrderService orders = new OrderService(new FileOrderStore(dir), new CatalogProductAdapter(catalog), bus, () -> fixed, ORDER_MAPPER);
+        OrderService orders = orderService(db, catalog, bus, () -> fixed);
         UUID orderId = orders.create(UUID.randomUUID()).id();
         orders.addItem(orderId, productId, 1);
         orders.place(orderId);
@@ -413,8 +440,8 @@ public final class Checks {
         // Життєві цикли, налаштовані в точці складання, — як у прикладах методички.
         check(services.lifetimeOf(OrderMapper.class) == Lifetime.TRANSIENT && services.lifetimeOf(ProductMapper.class) == Lifetime.TRANSIENT
                         && services.lifetimeOf(OrderUseCases.class) == Lifetime.SCOPED && services.lifetimeOf(CatalogUseCases.class) == Lifetime.SCOPED
-                        && services.lifetimeOf(EventBus.class) == Lifetime.SINGLETON && services.lifetimeOf(OrderStore.class) == Lifetime.SINGLETON,
-                "DI: mappers Transient, use cases Scoped, event bus and stores Singleton");
+                        && services.lifetimeOf(EventBus.class) == Lifetime.SINGLETON && services.lifetimeOf(FileDataContext.class) == Lifetime.SINGLETON,
+                "DI: mappers Transient, use cases Scoped, event bus and data context Singleton");
 
         try (ServiceScope request1 = services.createScope(); ServiceScope request2 = services.createScope()) {
             check(request1.get(OrderMapper.class) != request1.get(OrderMapper.class),
@@ -505,6 +532,106 @@ public final class Checks {
                 "Endpoints and use cases depend only on interfaces injected through the constructor");
     }
 
+    // ---------------- ПР5: Repository та Unit of Work ----------------
+
+    private static void repositoryAndUnitOfWork(Path dir) throws IOException {
+        // Абстракції — в Application, реалізації — в Infrastructure; сценарії залежать лише від абстракцій.
+        check(OrderRepository.class.isInterface() && ProductRepository.class.isInterface() && UnitOfWork.class.isInterface()
+                        && OrderRepository.class.getPackageName().startsWith("com.internetshop.application")
+                        && UnitOfWork.class.getPackageName().startsWith("com.internetshop.application")
+                        && OrderRepository.class.isAssignableFrom(FileOrderRepository.class)
+                        && ProductRepository.class.isAssignableFrom(FileProductRepository.class)
+                        && UnitOfWork.class.isAssignableFrom(FileUnitOfWork.class)
+                        && FileOrderRepository.class.getPackageName().startsWith("com.internetshop.infrastructure"),
+                "Repository and Unit of Work interfaces live in Application, implementations in Infrastructure");
+        check(List.of(OrderService.class.getConstructors()[0].getParameterTypes()).containsAll(List.of(OrderRepository.class, UnitOfWork.class))
+                        && Arrays.equals(CatalogService.class.getConstructors()[0].getParameterTypes(),
+                        new Class<?>[]{ProductRepository.class, UnitOfWork.class, ProductMapper.class}),
+                "Application services work only with Repository and Unit of Work abstractions");
+
+        // Репозиторій сам не зберігає: зміни з'являються у сховищі лише після saveChanges.
+        FileDataContext db = new FileDataContext(dir);
+        FileUnitOfWork unitOfWork = new FileUnitOfWork(db);
+        ProductRepository products = new FileProductRepository(db, unitOfWork);
+        Product mouse = new Product(new ProductName("Миша"), "", Money.of("100"));
+        products.add(mouse);
+        check(products.findById(mouse.getId()).isEmpty() && productsAfterRestart(dir).findAll().isEmpty(),
+                "Repository only registers changes: nothing is saved before saveChanges");
+        unitOfWork.saveChanges();
+        check(productsAfterRestart(dir).findById(mouse.getId())
+                        .map(p -> p.getName().value().equals("Миша")).orElse(false),
+                "Unit of Work: saveChanges persists registered changes (visible after restart)");
+
+        // Кінець області запиту без saveChanges = відкат.
+        Product cable = new Product(new ProductName("Кабель"), "", Money.of("199"));
+        products.add(cable);
+        unitOfWork.close();
+        unitOfWork.saveChanges();
+        check(products.findById(cable.getId()).isEmpty(), "Unit of Work: unsaved changes are discarded when the request scope closes");
+
+        // Атомарність: дві зміни однієї операції — або обидві, або жодної.
+        OrderRepository orders = new FileOrderRepository(db, unitOfWork);
+        Order order = new Order(new CustomerId(UUID.randomUUID()));
+        orders.add(order);
+        unitOfWork.saveChanges();
+        Order stale = orders.findById(order.getId()).orElseThrow();
+        Order fresh = orders.findById(order.getId()).orElseThrow();
+        fresh.addItem(mouse.getId(), "Миша", Money.of("100"), new Quantity(1));
+        orders.update(fresh);
+        unitOfWork.saveChanges();                         // інший запит устиг змінити замовлення
+        Product keyboard = new Product(new ProductName("Клавіатура"), "", Money.of("900"));
+        products.add(keyboard);                           // зміна 1 — коректна
+        stale.addItem(mouse.getId(), "Миша", Money.of("100"), new Quantity(5));
+        orders.update(stale);                             // зміна 2 — застаріла версія
+        expect(ConcurrentChangeException.class, unitOfWork::saveChanges, "Unit of Work: conflicting change fails the whole saveChanges");
+        check(products.findById(keyboard.getId()).isEmpty() && productsAfterRestart(dir).findById(keyboard.getId()).isEmpty()
+                        && orders.findById(order.getId()).orElseThrow().getLines().get(0).getQuantity().value() == 1,
+                "Unit of Work: atomic - when one change fails, no change of the operation is saved");
+        unitOfWork.saveChanges();
+        check(products.findById(keyboard.getId()).isEmpty(), "Unit of Work: failed changes are dropped, not re-applied by the next saveChanges");
+
+        // Атомарність між файлами: якщо orders.db записати не вдалося, уже записаний products.db повертається.
+        Path ordersFile = dir.resolve("orders.db");
+        Path backup = dir.resolve("orders.backup");
+        Files.move(ordersFile, backup);
+        Files.createDirectories(ordersFile.resolve("blocked")); // файл замовлень неможливо перезаписати
+        products.add(keyboard);
+        orders.add(new Order(new CustomerId(UUID.randomUUID())));
+        boolean failed = false;
+        try {
+            unitOfWork.saveChanges();
+        } catch (RuntimeException e) {
+            failed = true;
+        }
+        Files.delete(ordersFile.resolve("blocked"));
+        Files.delete(ordersFile);
+        Files.move(backup, ordersFile);
+        check(failed && products.findById(keyboard.getId()).isEmpty()
+                        && productsAfterRestart(dir).findById(keyboard.getId()).isEmpty(),
+                "Unit of Work: write failure of one file rolls back the other (no half-saved operation)");
+
+        // Сценарій: кожна бізнес-операція закінчується одним saveChanges, читання нічого не зберігає.
+        AtomicInteger saves = new AtomicInteger();
+        FileUnitOfWork real = new FileUnitOfWork(db);
+        UnitOfWork counting = () -> { saves.incrementAndGet(); real.saveChanges(); };
+        OrderService service = new OrderService(new FileOrderRepository(db, real), counting,
+                new CatalogProductAdapter(catalogService(db)), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
+        UUID orderId = service.create(UUID.randomUUID()).id();
+        service.addItem(orderId, mouse.getId(), 2);
+        service.place(orderId);
+        service.list();
+        service.get(orderId);
+        check(saves.get() == 3 && new FileOrderRepository(new FileDataContext(dir), new FileUnitOfWork(db)).findById(orderId)
+                        .map(o -> o.getStatus() == OrderStatus.PLACED && o.getLines().size() == 1).orElse(false),
+                "Business operations still work: each one is saved by exactly one saveChanges, reads save nothing");
+    }
+
+    /** Читання «після перезапуску»: новий контекст даних над тими самими файлами. */
+    private static ProductRepository productsAfterRestart(Path dir) {
+        FileDataContext db = new FileDataContext(dir);
+        return new FileProductRepository(db, new FileUnitOfWork(db));
+    }
+
     // ---------------- Межі шарів і bounded contexts ----------------
 
     private static void architecture(Path root) throws IOException {
@@ -535,7 +662,7 @@ public final class Checks {
                 "Events are plain data: no domain objects or services inside");
         List<String> consumers = new ArrayList<>(importsOf(application.resolve("com/internetshop/application/notifications")));
         consumers.addAll(importsOf(application.resolve("com/internetshop/application/analytics")));
-        check(consumers.stream().noneMatch(i -> i.contains("OrderService") || i.contains("OrderStore")),
+        check(consumers.stream().noneMatch(i -> i.contains("OrderService") || i.contains("OrderRepository")),
                 "Event handlers do not call Ordering services or stores");
 
         // ПР3: сценарії не звертаються до системного годинника напряму, Router не знає винятків внутрішніх шарів.
@@ -560,9 +687,17 @@ public final class Checks {
         components.addAll(sourcesOf(infrastructure));
         components.addAll(sourcesOf(webapi.resolve("endpoints")));
         components.addAll(sourcesOf(webapi.resolve("http")));
-        Pattern directCreation = Pattern.compile("new \\w*(Service|Store|Adapter|Mapper|EventBus|Provider|Outbox|Statistics|Handler)\\(");
+        Pattern directCreation = Pattern.compile("new \\w*(Service|Store|Repository|UnitOfWork|DataContext|Adapter|Mapper|EventBus|Provider|Outbox|Statistics|Handler)\\(");
         check(components.stream().noneMatch(src -> directCreation.matcher(src).find()),
-                "DI: services, stores, adapters and mappers are not created with new inside other classes");
+                "DI: services, repositories, adapters and mappers are not created with new inside other classes");
+
+        // ПР5: репозиторії лише перетворюють дані й реєструють зміни; з файлами працює тільки контекст даних.
+        Path persistence = infrastructure.resolve("com/internetshop/infrastructure/persistence");
+        check(Files.readString(persistence.resolve("FileOrderRepository.java")).lines()
+                        .noneMatch(l -> l.contains("TextDataFile") || l.contains("java.nio"))
+                        && Files.readString(persistence.resolve("FileProductRepository.java")).lines()
+                        .noneMatch(l -> l.contains("TextDataFile") || l.contains("java.nio")),
+                "Repository: implementations do not write files themselves (only via Unit of Work and data context)");
         check(sourcesOf(application).stream().noneMatch(src -> src.contains("Mapper.toDto(") || src.contains("Mapper::toDto"))
                         && ProductMapper.class.isInterface() && OrderMapper.class.isInterface(),
                 "DI: mappers are injected abstractions, not static calls");

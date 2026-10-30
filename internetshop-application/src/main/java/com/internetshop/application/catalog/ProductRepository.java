@@ -7,10 +7,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Контракт збереження товарів. Належить Application, щоб сценарії не залежали
- * від конкретного сховища; реалізація — FileProductStore в Infrastructure.
+ * ПР5 (Repository): колекція товарів каталогу (раніше — ProductStore). Належить Application,
+ * щоб сценарії не залежали від конкретного сховища; реалізація — FileProductRepository в Infrastructure.
+ * Зміни записуються лише під час UnitOfWork.saveChanges().
  */
-public interface ProductStore {
+public interface ProductRepository {
 
     List<Product> findAll();
 

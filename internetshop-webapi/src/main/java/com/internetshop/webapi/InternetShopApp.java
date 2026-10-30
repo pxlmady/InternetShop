@@ -9,14 +9,14 @@ import com.internetshop.application.catalog.CatalogUseCases;
 import com.internetshop.application.catalog.ProductDtoMapper;
 import com.internetshop.application.catalog.ProductMapper;
 import com.internetshop.application.catalog.ProductQueries;
-import com.internetshop.application.catalog.ProductStore;
+import com.internetshop.application.catalog.ProductRepository;
 import com.internetshop.application.notifications.NotificationFeed;
 import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
 import com.internetshop.application.ordering.OrderDtoMapper;
 import com.internetshop.application.ordering.OrderMapper;
 import com.internetshop.application.ordering.OrderService;
-import com.internetshop.application.ordering.OrderStore;
+import com.internetshop.application.ordering.OrderRepository;
 import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductCatalog;
 import com.internetshop.application.ordering.events.OrderCreated;
@@ -24,13 +24,16 @@ import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
+import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.domain.shared.DomainRuleException;
 import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
 import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
-import com.internetshop.infrastructure.persistence.FileOrderStore;
-import com.internetshop.infrastructure.persistence.FileProductStore;
+import com.internetshop.infrastructure.persistence.FileDataContext;
+import com.internetshop.infrastructure.persistence.FileOrderRepository;
+import com.internetshop.infrastructure.persistence.FileProductRepository;
+import com.internetshop.infrastructure.persistence.FileUnitOfWork;
 import com.internetshop.infrastructure.time.SystemTimeProvider;
 import com.internetshop.webapi.di.ServiceCollection;
 import com.internetshop.webapi.di.ServiceProvider;
@@ -59,6 +62,9 @@ import java.util.concurrent.Executors;
  * Метод configureServices лише реєструє в контейнері пари «абстракція → реалізація» з життєвим циклом
  * (аналог builder.Services.AddSingleton/AddScoped/AddTransient у Program.cs), а створює об'єкти
  * і передає їм залежності через конструктори сам контейнер. Контейнер використовується тільки тут і в Router.
+ * <p>
+ * ПР5 (Repository + Unit of Work): тут вибираються реалізації OrderRepository, ProductRepository і UnitOfWork,
+ * як AddScoped&lt;IOrderRepository, ...&gt;() / AddScoped&lt;IUnitOfWork, UnitOfWork&gt;() у методичці.
  */
 public final class InternetShopApp {
 
@@ -69,11 +75,9 @@ public final class InternetShopApp {
         ServiceCollection services = new ServiceCollection();
 
         // ---- Singleton: один екземпляр на весь застосунок ----
-        // Сховища тримають єдину копію даних у пам'яті та синхронізують запис у файл.
-        // Два екземпляри над тим самим файлом розійшлися б у даних, тому вони Singleton
-        // (на відміну від EF-репозиторіїв у методичці, які Scoped через DbContext на запит).
-        services.addSingleton(ProductStore.class, s -> new FileProductStore(dataDirectory));
-        services.addSingleton(OrderStore.class, s -> new FileOrderStore(dataDirectory));
+        // Контекст даних (аналог AppDbContext) тримає єдину копію збережених даних і синхронізує запис у файли.
+        // Два екземпляри над тими самими файлами розійшлися б у даних, тому він Singleton.
+        services.addSingleton(FileDataContext.class, s -> new FileDataContext(dataDirectory));
         services.addSingleton(TimeProvider.class, SystemTimeProvider.class);
         // Шина подій — як у методичці: AddSingleton<IEventBus, InProcessEventBus>().
         // Один і той самий екземпляр видно як EventBus (для publish) і як InProcessEventBus (для subscribe).
@@ -91,6 +95,13 @@ public final class InternetShopApp {
         services.addSingleton(OrderPlacedNotificationHandler.class, OrderPlacedNotificationHandler.class);
 
         // ---- Scoped: один екземпляр на HTTP-запит ----
+        // ПР5: Unit of Work і репозиторії — Scoped, як у методичці: в межах одного запиту всі репозиторії
+        // реєструють зміни в одному Unit of Work, а сценарій зберігає їх одним saveChanges().
+        // Один екземпляр FileUnitOfWork видно як UnitOfWork (для сценаріїв) і як клас (для репозиторіїв).
+        services.addScoped(FileUnitOfWork.class, FileUnitOfWork.class);
+        services.addScoped(UnitOfWork.class, s -> s.get(FileUnitOfWork.class));
+        services.addScoped(ProductRepository.class, FileProductRepository.class);
+        services.addScoped(OrderRepository.class, FileOrderRepository.class);
         // Сценарії Application, адаптер між контекстами та ендпоінти: у межах одного запиту
         // всі, кому потрібен ProductQueries / CatalogUseCases, отримують той самий CatalogService.
         services.addScoped(CatalogUseCases.class, CatalogService.class);

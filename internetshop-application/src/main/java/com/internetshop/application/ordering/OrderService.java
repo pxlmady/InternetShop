@@ -3,6 +3,7 @@ package com.internetshop.application.ordering;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.shared.TimeProvider;
+import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.domain.ordering.CustomerId;
 import com.internetshop.domain.ordering.Order;
@@ -25,17 +26,24 @@ import java.util.UUID;
  * <p>
  * ПР4 (DI): реалізує абстракцію OrderUseCases; мапер теж отримується через конструктор (раніше —
  * статичний виклик OrderMapper.toDto). Усі об'єкти створює контейнер; сервіс — Scoped.
+ * <p>
+ * ПР5 (Repository + Unit of Work): сервіс працює лише з абстракціями OrderRepository і UnitOfWork.
+ * Кожен сценарій: репозиторій → доменна дія → repository.add/update → unitOfWork.saveChanges() → подія.
+ * Подія публікується лише після успішного saveChanges, тобто тоді, коли зміни вже збережено.
  */
 public final class OrderService implements OrderUseCases {
 
-    private final OrderStore store;
+    private final OrderRepository orders;
+    private final UnitOfWork unitOfWork;
     private final ProductCatalog catalog;
     private final EventBus events;
     private final TimeProvider time;
     private final OrderMapper mapper;
 
-    public OrderService(OrderStore store, ProductCatalog catalog, EventBus events, TimeProvider time, OrderMapper mapper) {
-        this.store = Objects.requireNonNull(store);
+    public OrderService(OrderRepository orders, UnitOfWork unitOfWork, ProductCatalog catalog, EventBus events,
+                        TimeProvider time, OrderMapper mapper) {
+        this.orders = Objects.requireNonNull(orders);
+        this.unitOfWork = Objects.requireNonNull(unitOfWork);
         this.catalog = Objects.requireNonNull(catalog);
         this.events = Objects.requireNonNull(events);
         this.time = Objects.requireNonNull(time);
@@ -44,7 +52,7 @@ public final class OrderService implements OrderUseCases {
 
     @Override
     public List<OrderDto> list() {
-        return store.findAll().stream().map(mapper::toDto).toList();
+        return orders.findAll().stream().map(mapper::toDto).toList();
     }
 
     @Override
@@ -55,7 +63,8 @@ public final class OrderService implements OrderUseCases {
     @Override
     public OrderDto create(UUID customerId) {
         Order order = new Order(new CustomerId(customerId));
-        store.add(order);
+        orders.add(order);
+        unitOfWork.saveChanges();
         // Подія публікується лише після збереження: вона фіксує факт, який уже відбувся.
         events.publish(new OrderCreated(order.getId(), time.now()));
         return mapper.toDto(order);
@@ -68,7 +77,8 @@ public final class OrderService implements OrderUseCases {
         CatalogProduct product = (productId == null ? null : catalog.findProduct(productId).orElse(null));
         if (product == null) throw new ProductNotInCatalogException();
         order.addItem(product.id(), product.name(), new Money(product.price()), new Quantity(quantity));
-        store.update(order);
+        orders.update(order);
+        unitOfWork.saveChanges();
         return mapper.toDto(order);
     }
 
@@ -76,7 +86,8 @@ public final class OrderService implements OrderUseCases {
     public OrderDto place(UUID orderId) {
         Order order = load(orderId);
         order.place();
-        store.update(order);
+        orders.update(order);
+        unitOfWork.saveChanges();
         int itemCount = order.getLines().stream().mapToInt(l -> l.getQuantity().value()).sum();
         events.publish(new OrderPlaced(order.getId(), order.getCustomerId().value(), itemCount,
                 order.total().amount(), time.now()));
@@ -85,6 +96,6 @@ public final class OrderService implements OrderUseCases {
 
     private Order load(UUID id) {
         if (id == null) throw new OrderNotFoundException();
-        return store.findById(id).orElseThrow(OrderNotFoundException::new);
+        return orders.findById(id).orElseThrow(OrderNotFoundException::new);
     }
 }

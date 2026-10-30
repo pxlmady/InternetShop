@@ -1,10 +1,11 @@
-# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID та Dependency Injection
+# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
 - №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design));
 - №3 — **Принципи SOLID** (аналіз порушень і рефакторинг, див. [розділ ПР3](#практична-робота-3-принципи-solid));
-- №4 — **Dependency Injection та інверсія керування** (DI-контейнер і життєві цикли, див. [розділ ПР4](#практична-робота-4-dependency-injection-та-інверсія-керування)).
+- №4 — **Dependency Injection та інверсія керування** (DI-контейнер і життєві цикли, див. [розділ ПР4](#практична-робота-4-dependency-injection-та-інверсія-керування));
+- №5 — **Repository та Unit of Work** (див. [розділ ПР5](#практична-робота-5-repository-та-unit-of-work)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -25,7 +26,7 @@
 | Доменна модель з підходами DDD | Сутності, Value Objects, агрегати з інваріантами — див. [Доменна модель](#доменна-модель) |
 | Один або декілька bounded context і їх взаємодія | Catalog і Ordering; Ordering звертається до Catalog лише через контракт `ProductCatalog` |
 | Domain без залежностей від фреймворків | `internetshop-domain/pom.xml` не має жодних залежностей — лише JDK; додатково перевіряє `Checks` |
-| Взаємодія шарів через абстракції | Сховища описані інтерфейсами в Application (`ProductStore`, `OrderStore`, `ProductCatalog`) |
+| Взаємодія шарів через абстракції | Репозиторії, Unit of Work і контракт між контекстами описані інтерфейсами в Application (`ProductRepository`, `OrderRepository`, `UnitOfWork`, `ProductCatalog`) |
 | Немає бізнес-логіки в контролерах і сховищах | Ендпоінти лише викликають сервіси Application; правила — тільки в Domain |
 
 ## Предметна область і bounded contexts
@@ -104,8 +105,8 @@ Value Objects реалізовані як Java `record`: вони незмінн
 | Шар (модуль) | Компоненти | Відповідальність |
 |---|---|---|
 | **Domain** | `Product`, `ProductName`, `Order`, `OrderLine`, `Quantity`, `CustomerId`, `Money`, `Entity` | Модель і бізнес-правила. Лише JDK |
-| **Application** | `CatalogService`, `OrderService`, мапери DTO, інтерфейси `CatalogUseCases`, `OrderUseCases`, `ProductStore`, `OrderStore`, `ProductCatalog`, `ProductQueries`, `TimeProvider`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
-| **Infrastructure** | `FileProductStore`, `FileOrderStore`, `TextDataFile`, `CatalogProductAdapter`, `SystemTimeProvider` | Збереження у файли; адаптер між контекстами; системний час |
+| **Application** | `CatalogService`, `OrderService`, мапери DTO, інтерфейси `CatalogUseCases`, `OrderUseCases`, `ProductRepository`, `OrderRepository`, `UnitOfWork`, `ProductCatalog`, `ProductQueries`, `TimeProvider`, DTO, винятки | Сценарії використання та контракти, потрібні сценаріям |
+| **Infrastructure** | `FileDataContext`, `FileUnitOfWork`, `FileProductRepository`, `FileOrderRepository`, `TextDataFile`, `CatalogProductAdapter`, `SystemTimeProvider` | Збереження у файли; адаптер між контекстами; системний час |
 | **WebApi** | `Main`, `InternetShopApp`, DI-контейнер `di/`, `Router`, `ErrorMapper`, `HttpResponses`, `Request`, `Json`, `*Endpoints`, статична сторінка | HTTP, JSON, складання залежностей (контейнер), перетворення помилок на HTTP-статуси |
 | Checks | `Checks` | Консольні перевірки (аналог `CourseDemo.Checks`) |
 
@@ -128,12 +129,14 @@ flowchart TB
     WebApi --> Domain
 ```
 
-Інтерфейси сховищ належать **Application**, а реалізації — **Infrastructure** (інверсія залежностей).
+Інтерфейси репозиторіїв і Unit of Work належать **Application**, а реалізації — **Infrastructure** (інверсія залежностей).
 Конкретні реалізації обираються лише в точці складання `InternetShopApp.configureServices` (Composition Root, аналог `Program.cs`).
 З ПР4 там лише реєструються пари «абстракція → реалізація» з життєвим циклом, а об'єкти створює DI-контейнер:
 
 ```java
-services.addSingleton(OrderStore.class, s -> new FileOrderStore(dataDirectory));
+services.addSingleton(FileDataContext.class, s -> new FileDataContext(dataDirectory));
+services.addScoped(OrderRepository.class, FileOrderRepository.class);  // ПР5
+services.addScoped(UnitOfWork.class, s -> s.get(FileUnitOfWork.class)); // ПР5
 services.addScoped(CatalogUseCases.class, CatalogService.class);
 services.addScoped(ProductCatalog.class, CatalogProductAdapter.class); // Ordering -> Catalog
 services.addScoped(OrderUseCases.class, OrderService.class);           // ПР2 + ПР3 + ПР4
@@ -145,19 +148,20 @@ services.addTransient(OrderMapper.class, OrderDtoMapper.class);
 `OrderService.addItem`:
 
 ```java
-Order order = load(orderId);                                   // 1. завантажити агрегат через OrderStore
+Order order = load(orderId);                                   // 1. завантажити агрегат через OrderRepository
 CatalogProduct product = catalog.findProduct(productId)...;    // 2. дані з Catalog через контракт
 order.addItem(product.id(), product.name(),                    // 3. бізнес-рішення приймає Domain
         new Money(product.price()), new Quantity(quantity));
-store.update(order);                                           // 4. зберегти (з перевіркою версії)
-return toDto(order);                                           // 5. DTO для відповіді
+orders.update(order);                                          // 4. позначити зміну в репозиторії
+unitOfWork.saveChanges();                                      // 5. зберегти (атомарно, з перевіркою версії)
+return mapper.toDto(order);                                    // 6. DTO для відповіді
 ```
 
-Сервіс **організовує кроки**, `Order` **перевіряє правила**, сховище **зберігає**. Якщо `addItem` відхиляє дію, `update` не виконується.
+Сервіс **організовує кроки**, `Order` **перевіряє правила**, репозиторій і Unit of Work **зберігають**. Якщо `addItem` відхиляє дію, до `saveChanges` справа не доходить.
 
 ### Видалення товару і межа між контекстами
 
-`DELETE /products/{id}` → `ProductEndpoints` → `CatalogService.delete` → `ProductStore.remove` → `FileProductStore`.
+`DELETE /products/{id}` → `ProductEndpoints` → `CatalogService.delete` → `ProductRepository.remove` + `UnitOfWork.saveChanges` → `FileDataContext`.
 
 - **Уже створені замовлення не змінюються.** `OrderLine` зберігає власний «знімок» назви й ціни, тож Ordering не залежить від того, чи існує товар у каталозі.
 - **Нові замовлення.** Додати видалений товар не можна: `ProductCatalog` повертає «не знайдено», і API відповідає 404.
@@ -166,14 +170,14 @@ return toDto(order);                                           // 5. DTO для 
 ## Збереження даних
 
 Застосунок написаний на чистій Java, а драйвер БД (SQLite з CourseDemo) був би сторонньою бібліотекою. Тому Infrastructure зберігає дані
-у текстових файлах `data/products.db` і `data/orders.db`. Деталі збереження приховані за інтерфейсами `ProductStore` / `OrderStore`,
+у текстових файлах `data/products.db` і `data/orders.db`. Деталі збереження приховані за інтерфейсами `ProductRepository` / `OrderRepository` / `UnitOfWork`,
 тож заміна на справжню БД зачепить лише Infrastructure.
 
-- **Модель збереження окрема від доменної:** сховища зберігають записи (`ProductRecord`, `OrderRecord`) і відновлюють доменні об'єкти через
+- **Модель збереження окрема від доменної:** `FileDataContext` зберігає записи (`ProductRecord`, `OrderRecord`), а репозиторії відновлюють доменні об'єкти через
   `Product.restore` / `Order.restore`. Під час відновлення конструктори Value Objects знову перевіряють правила.
 - **Агрегат зберігається цілком:** замовлення та всі його рядки.
 - **Атомарний запис:** спочатку тимчасовий файл, потім заміна, тому напівзаписаний файл не залишиться.
-- **Оптимістичне блокування:** `Order` має `version`. `update` приймається, лише якщо збережена версія збігається з прочитаною,
+- **Оптимістичне блокування:** `Order` має `version`. зміна приймається під час `saveChanges`, лише якщо збережена версія збігається з прочитаною,
   інакше виникає `ConcurrentChangeException` → HTTP 409 (аналог `Version` + `IsConcurrencyToken` у CourseDemo).
 - Дані зберігаються після перезапуску застосунку.
 
@@ -244,7 +248,7 @@ return toDto(order);                                           // 5. DTO для 
 | `NotificationEndpoints`, `StatisticsEndpoints` | WebApi | `GET /notifications`, `GET /statistics` (лише читання) |
 
 ```text
-POST /orders/{id}/place → OrderService.place → Order.place() → OrderStore.update → EventBus.publish(OrderPlaced)
+POST /orders/{id}/place → OrderService.place → Order.place() → OrderRepository.update → UnitOfWork.saveChanges → EventBus.publish(OrderPlaced)
                                                                              ├─► OrderPlacedNotificationHandler → NotificationSender
                                                                              └─► OrderPlacedStatisticsHandler   → SalesStatistics
 ```
@@ -308,7 +312,7 @@ flowchart LR
 
 Завдання: проаналізувати залежності між компонентами, знайти випадки створення залежностей усередині класів,
 замінити їх на Dependency Injection, забезпечити залежність від абстракцій і налаштувати DI-контейнер із життєвими циклами.
-Оскільки ПР3 вже ввела DIP (`TimeProvider`, `ProductQueries`, `OrderStore`, `EventBus` через конструктори), ПР4 доповнює це
+Оскільки ПР3 вже ввела DIP (`TimeProvider`, `ProductQueries`, `OrderStore` (з ПР5 — `OrderRepository`), `EventBus` через конструктори), ПР4 доповнює це
 **контейнером** (інверсія керування: об'єкти створює не код застосунку, а контейнер) і прибирає залишки статичних залежностей.
 Функціонал, HTTP API і формат даних не змінилися: 82 перевірки ПР1–ПР3 проходять (змінено лише виклики конструкторів), додано 19 нових.
 
@@ -335,7 +339,7 @@ flowchart LR
 |---|---|---|
 | **Transient** | `OrderMapper`, `ProductMapper` | Легковагові, без стану — приклад з методички `AddTransient<IOrderMapper, OrderMapper>()` |
 | **Scoped** (один HTTP-запит) | `CatalogUseCases`/`ProductQueries` (`CatalogService`), `OrderUseCases` (`OrderService`), `ProductCatalog` (`CatalogProductAdapter`), усі `*Endpoints` | Сценарії одного запиту: усі компоненти запиту отримують той самий екземпляр, різні запити — різні |
-| **Singleton** | `EventBus` (`InProcessEventBus`), `ProductStore`, `OrderStore`, `TimeProvider`, `NotificationSender`/`NotificationFeed`, `SalesStatistics`/`SalesReport`, обробники подій, `ErrorMapper`, `Router` | Спільний стан або конфігурація застосунку. Шина — приклад з методички `AddSingleton<IEventBus, InProcessEventBus>()`. Файлові сховища тримають єдину копію даних у пам'яті й синхронізують запис, тому, на відміну від EF-репозиторіїв (Scoped через `DbContext`), вони Singleton |
+| **Singleton** | `EventBus` (`InProcessEventBus`), `ProductStore`, `OrderStore` (з ПР5 — `FileDataContext`, а репозиторії й `UnitOfWork` стали Scoped), `TimeProvider`, `NotificationSender`/`NotificationFeed`, `SalesStatistics`/`SalesReport`, обробники подій, `ErrorMapper`, `Router` | Спільний стан або конфігурація застосунку. Шина — приклад з методички `AddSingleton<IEventBus, InProcessEventBus>()`. Файлові сховища тримають єдину копію даних у пам'яті й синхронізують запис, тому, на відміну від EF-репозиторіїв (Scoped через `DbContext`), вони Singleton |
 
 ```mermaid
 flowchart LR
@@ -363,9 +367,57 @@ flowchart LR
   також виявляються незареєстровані залежності, цикли й повторні реєстрації;
 - **узгодженість із SOLID і Clean Architecture** — контейнер лежить у зовнішньому шарі (WebApi), внутрішні шари знають лише свої інтерфейси.
 
-Свідомо не змінено: `FileProductStore`/`FileOrderStore` створюють `TextDataFile` усередині — це приватна деталь формату файлу, а не замінна
+Свідомо не змінено: `FileProductStore`/`FileOrderStore` (з ПР5 — `FileDataContext`) створюють `TextDataFile` усередині — це приватна деталь формату файлу, а не замінна
 служба (замінюється все сховище через `ProductStore`/`OrderStore`); обробники подій залежать від класу `SalesStatistics` у тому ж пакеті Application —
 це модель для читання, яку вони оновлюють, без альтернативних реалізацій.
+
+## Практична робота №5: Repository та Unit of Work
+
+Завдання: проаналізувати доступ до даних, виділити інтерфейс репозиторію, реалізувати його в Infrastructure, додати Unit of Work
+і змінити прикладний рівень так, щоб він працював лише з цими абстракціями.
+Функціонал, HTTP API і формат файлів даних не змінилися: 101 перевірка ПР1–ПР4 проходить (змінено лише створення сервісів у перевірках), додано 11 нових.
+
+| Вимога методички | Реалізація |
+|---|---|
+| 1. Проаналізувати доступ до даних | До ПР5 `FileOrderStore` / `FileProductStore` одночасно були «колекцією» і самі записували файл у кожному `add` / `update` / `remove`: межу транзакції визначав не сценарій, а сховище, і дві зміни однієї операції записувались окремо |
+| 2. Інтерфейс репозиторію | `OrderRepository` (Application/ordering) і `ProductRepository` (Application/catalog): `findAll`, `findById`, `add`, `update` / `remove` — операції над колекцією агрегатів |
+| 3. Реалізація в Infrastructure | `FileOrderRepository`, `FileProductRepository`: лише перетворення агрегат ↔ запис і реєстрація змін, без бізнес-правил і без роботи з файлами |
+| 4. Абстракція Unit of Work | `UnitOfWork.saveChanges()` (Application/shared); реалізація `FileUnitOfWork` накопичує зміни запиту й передає їх у `FileDataContext.commit` (аналог `AppDbContext.SaveChanges`) |
+| 5. Прикладний рівень — лише через абстракції | `OrderService(OrderRepository, UnitOfWork, ...)`, `CatalogService(ProductRepository, UnitOfWork, ProductMapper)`; кожен сценарій завершується одним `unitOfWork.saveChanges()` |
+| 6. Перевірити бізнес-операції | `mvn verify`: 112 перевірок (101 з ПР1–ПР4 + 11 нових), відповіді HTTP API до і після змін однакові |
+
+```mermaid
+flowchart LR
+    subgraph Application
+        OS[OrderService] --> OR[[OrderRepository]]
+        OS --> UOW[[UnitOfWork]]
+        CS[CatalogService] --> PR[[ProductRepository]]
+        CS --> UOW
+    end
+    subgraph Infrastructure
+        FOR[FileOrderRepository] -. implements .-> OR
+        FPR[FileProductRepository] -. implements .-> PR
+        FU[FileUnitOfWork] -. implements .-> UOW
+        FOR -- register change --> FU
+        FPR -- register change --> FU
+        FU -- commit --> DC[FileDataContext<br/>products.db, orders.db]
+        FOR -- read --> DC
+    end
+```
+
+Як працює `saveChanges` (`FileDataContext.commit`):
+1. зміни запиту застосовуються до **копії** таблиць; якщо хоч одна не проходить перевірку (застаріла версія → `ConcurrentChangeException`), збережений стан не змінюється;
+2. змінені файли записуються, кожен атомарно (тимчасовий файл + заміна); якщо другий файл записати не вдалося, перший повертається до попереднього вмісту;
+3. лише після цього копія стає поточним станом. Після `saveChanges` (успішного чи ні) список змін очищується, а незбережені зміни відкидаються при закритті області запиту.
+
+| Компонент | Lifetime | Чому |
+|---|---|---|
+| `FileDataContext` | Singleton | Єдина копія збережених даних і синхронізований запис у файли |
+| `FileUnitOfWork` (`UnitOfWork`), `FileOrderRepository`, `FileProductRepository` | Scoped | Як у методичці (`AddScoped`): усі репозиторії одного HTTP-запиту реєструють зміни в одному Unit of Work |
+
+Методичні вказівки: бізнес-логіки в репозиторіях немає (правила перевіряють `Order` / `Product`); деталі зберігання (файли, `TextDataFile`, записи)
+не виходять за межі пакета `infrastructure.persistence`; імена методів — операції над колекцією (`add`, `findById`, `update`, `remove`);
+події ПР2 публікуються лише після успішного `saveChanges`, DI ПР4 збирає репозиторії та Unit of Work через конструктори.
 
 ## Запуск
 
@@ -379,12 +431,12 @@ flowchart LR
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 101 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 112 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 101 перевірка
+mvn verify                                         # збірка всіх модулів + 112 перевірок
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -416,7 +468,7 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
 - **Події (ПР2):** `OrderCreated` і `OrderPlaced` публікуються після відповідних операцій і лише після успіху;
   обробники створюють сповіщення та оновлюють статистику; збій одного обробника не скасовує операцію і не зупиняє інших.
 - **Архітектура (ПР2):** Ordering (producer) не імпортує обробників і реалізацію шини; події не містять доменних об'єктів;
-  обробники не звертаються до `OrderService` чи `OrderStore`.
+  обробники не звертаються до `OrderService` чи `OrderRepository`.
 - **SOLID (ПР3):** `OrderMapper` і відсутність мапінгу в `OrderService` (SRP); `OrderService` залежить лише від інтерфейсів,
   час подій задає підставлений `TimeProvider`, адаптер працює із заглушкою `ProductQueries` (DIP);
   обробник отримує лише `NotificationSender`, маршрут — лише `NotificationFeed` (ISP); підтипи `NotFoundException` → 404 одним правилом (LSP);
@@ -442,16 +494,16 @@ InternetShop/
 │       └── ordering/      Order, OrderLine, Quantity, CustomerId, OrderStatus
 ├── internetshop-application/       pom.xml (-> domain)
 │   └── src/main/java/com/internetshop/application/
-│       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3)
+│       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3), UnitOfWork (ПР5)
 │       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
-│       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductStore, ProductDto, ...
-│       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderStore, ProductCatalog, CatalogProduct, OrderDto, ...
+│       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductRepository (ПР5), ProductDto, ...
+│       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderRepository (ПР5), ProductCatalog, CatalogProduct, OrderDto, ...
 │       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
 │       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
 │       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2), SalesReport (ПР4)
 ├── internetshop-infrastructure/    pom.xml (-> application, domain)
 │   └── src/main/java/com/internetshop/infrastructure/
-│       ├── persistence/   FileProductStore, FileOrderStore, TextDataFile
+│       ├── persistence/   FileDataContext, FileUnitOfWork, FileProductRepository, FileOrderRepository (ПР5), TextDataFile
 │       ├── integration/   CatalogProductAdapter
 │       ├── events/        InProcessEventBus                            (ПР2)
 │       ├── notifications/ InMemoryNotificationOutbox                   (ПР2)
@@ -475,9 +527,9 @@ InternetShop/
 | NuGet-пакети (EF Core, SQLite) | Немає: жодних сторонніх залежностей |
 | `record CourseTitle` | `record ProductName` / `Money` / `Quantity` / `CustomerId` |
 | `Course` + `Enrollment` (агрегат) | `Order` + `OrderLine` (агрегат) |
-| `ICourseStore` в Application | `ProductStore`, `OrderStore`, `ProductCatalog` в Application |
+| `ICourseStore` в Application | `ProductRepository`, `OrderRepository`, `UnitOfWork`, `ProductCatalog` в Application |
 | EF Core + SQLite | Файлове сховище на JDK (`java.nio.file`) |
-| `Version` як concurrency token | `version` в `Order` і перевірка в `FileOrderStore.update` |
+| `Version` як concurrency token | `version` в `Order` і перевірка в `FileOrderRepository.update` під час `saveChanges` |
 | `Program.cs`: DI, маршрути, middleware помилок | `InternetShopApp` (складання), `Router` (маршрути та помилки), `*Endpoints` |
 | Minimal API (Kestrel) | `com.sun.net.httpserver.HttpServer` з JDK |
 | `CourseDemo.Checks` (`dotnet run`) | `internetshop-checks` (`Checks`, запускається в `mvn verify`) |
@@ -494,10 +546,13 @@ InternetShop/
 | ПР4: `AddTransient` / `AddScoped` / `AddSingleton` | `addTransient` / `addScoped` / `addSingleton` з тими самими правилами життєвого циклу |
 | ПР4: область на HTTP-запит, активація контролерів | `Router` створює `ServiceScope` на кожен запит і отримує з неї `*Endpoints` |
 | ПР4: `IOrderMapper` / `OrderMapper` | `OrderMapper` (інтерфейс) / `OrderDtoMapper` (реалізація) |
+| ПР5: `IOrderRepository` + `IUnitOfWork` в Application | `OrderRepository`, `ProductRepository`, `UnitOfWork` в Application |
+| ПР5: `AppDbContext`, `UnitOfWork`, репозиторій в Infrastructure/Persistence | `FileDataContext`, `FileUnitOfWork`, `FileOrderRepository`, `FileProductRepository` |
+| ПР5: `_repo.AddAsync(order); _uow.SaveChangesAsync()` | `orders.add(order); unitOfWork.saveChanges();` в `OrderService` |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
-роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) і переходу на DI-контейнер (ПР4) поведінка не змінилася. Усі 101 перевірка проходить.
+роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) переходу на DI-контейнер (ПР4) і на Repository + Unit of Work (ПР5) поведінка не змінилася. Усі 112 перевірок проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.
