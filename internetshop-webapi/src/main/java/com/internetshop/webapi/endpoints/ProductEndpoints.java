@@ -1,22 +1,23 @@
 package com.internetshop.webapi.endpoints;
 
 import com.internetshop.application.catalog.CatalogUseCases;
-import com.internetshop.application.catalog.ProductDto;
+import com.internetshop.application.catalog.dto.CreateProductRequest;
 import com.internetshop.webapi.http.Request;
 import com.internetshop.webapi.http.Router;
 import com.internetshop.webapi.http.Router.Response;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 /**
  * HTTP-маршрути контексту Catalog. Обробники лише читають запит, викликають сценарії Catalog
- * і перетворюють DTO на JSON — бізнес-правил тут немає.
+ * і повертають DTO — бізнес-правил тут немає.
  * <p>
  * ПР4 (DI): замість статичного методу з переданим сервісом — звичайний клас з ін'єкцією через конструктор
  * (аналог контролера ASP.NET Core). Залежить від абстракції CatalogUseCases; екземпляр на кожен запит
  * створює контейнер (Scoped).
+ * <p>
+ * ПР6 (DTO): тіло запиту перетворюється на CreateProductRequest, а відповіддю є DTO (ProductDto,
+ * CreatedProductDto), які серіалізуються в JSON без ручного перекладання полів.
  */
 public final class ProductEndpoints {
 
@@ -35,28 +36,20 @@ public final class ProductEndpoints {
     }
 
     Response list(Request req) {
-        return Response.ok(catalog.list().stream().map(ProductEndpoints::json).toList());
+        return Response.ok(catalog.list());
     }
 
     Response get(Request req) {
-        return Response.ok(json(catalog.get(req.pathId("id"))));
+        return Response.ok(catalog.get(req.pathId("id")));
     }
 
     Response create(Request req) {
-        return Response.created(json(catalog.create(req.string("name"), req.string("description"), req.decimal("price"))));
+        CreateProductRequest body = new CreateProductRequest(req.string("name"), req.string("description"), req.decimal("price"));
+        return Response.created(catalog.create(body));
     }
 
     Response delete(Request req) {
         catalog.delete(req.pathId("id"));
         return Response.noContent();
-    }
-
-    static Map<String, Object> json(ProductDto p) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", p.id());
-        m.put("name", p.name());
-        m.put("description", p.description());
-        m.put("price", p.price());
-        return m;
     }
 }

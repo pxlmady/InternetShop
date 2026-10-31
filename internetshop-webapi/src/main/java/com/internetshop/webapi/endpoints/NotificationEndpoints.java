@@ -14,6 +14,8 @@ import java.util.Objects;
  * HTTP-маршрут для перегляду сповіщень, створених обробником події OrderPlaced. Лише читання:
  * маршрут отримує вузький контракт NotificationFeed, тож створити сповіщення через нього неможливо (ПР3, ISP).
  * ПР4 (DI): NotificationFeed передається через конструктор; сама стрічка — Singleton, ендпоінт — Scoped.
+ * ПР6 (лише потрібні дані): ідентифікатор покупця більше не віддається — стрічка спільна для всіх,
+ * і customerId розкривав би, яким покупцям належать замовлення. Клієнту достатньо замовлення, тексту й часу.
  */
 public final class NotificationEndpoints {
 
@@ -33,7 +35,6 @@ public final class NotificationEndpoints {
 
     private static Map<String, Object> json(Notification n) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("customerId", n.customerId());
         m.put("orderId", n.orderId());
         m.put("message", n.message());
         m.put("createdAt", n.createdAt().toString());

@@ -1,6 +1,6 @@
 package com.internetshop.infrastructure.integration;
 
-import com.internetshop.application.catalog.ProductDto;
+import com.internetshop.application.catalog.dto.ProductDto;
 import com.internetshop.application.catalog.ProductNotFoundException;
 import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.ordering.CatalogProduct;

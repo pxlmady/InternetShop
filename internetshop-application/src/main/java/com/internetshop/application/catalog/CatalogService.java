@@ -1,12 +1,11 @@
 package com.internetshop.application.catalog;
 
+import com.internetshop.application.catalog.dto.CreateProductRequest;
+import com.internetshop.application.catalog.dto.CreatedProductDto;
+import com.internetshop.application.catalog.dto.ProductDto;
 import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.domain.catalog.Product;
-import com.internetshop.domain.catalog.ProductName;
-import com.internetshop.domain.shared.DomainRuleException;
-import com.internetshop.domain.shared.Money;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -21,6 +20,9 @@ import java.util.UUID;
  * <p>
  * ПР5 (Repository + Unit of Work): товари читаються й змінюються через ProductRepository,
  * а записуються одним викликом unitOfWork.saveChanges() наприкінці сценарію.
+ * <p>
+ * ПР6 (DTO + мапінг): створення приймає CreateProductRequest; сутність Product із нього створює мапер,
+ * а назовні повертаються лише DTO (ProductDto для перегляду, CreatedProductDto для результату створення).
  */
 public final class CatalogService implements CatalogUseCases {
 
@@ -46,13 +48,12 @@ public final class CatalogService implements CatalogUseCases {
     }
 
     @Override
-    public ProductDto create(String name, String description, BigDecimal price) {
-        if (price == null) throw new DomainRuleException("Потрібно вказати ціну товару.");
-        // Бізнес-правила перевіряють ProductName, Money та Product.
-        Product product = new Product(new ProductName(name), description, new Money(price));
+    public CreatedProductDto create(CreateProductRequest request) {
+        // DTO → домен: бізнес-правила перевіряють ProductName, Money та Product.
+        Product product = mapper.toNewProduct(request);
         products.add(product);
         unitOfWork.saveChanges();
-        return mapper.toDto(product);
+        return mapper.toCreated(product);
     }
 
     /**

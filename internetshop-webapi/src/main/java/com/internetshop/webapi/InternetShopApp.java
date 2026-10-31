@@ -10,6 +10,7 @@ import com.internetshop.application.catalog.ProductDtoMapper;
 import com.internetshop.application.catalog.ProductMapper;
 import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.catalog.ProductRepository;
+import com.internetshop.application.catalog.dto.CreateProductRequest;
 import com.internetshop.application.notifications.NotificationFeed;
 import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
@@ -65,6 +66,9 @@ import java.util.concurrent.Executors;
  * <p>
  * ПР5 (Repository + Unit of Work): тут вибираються реалізації OrderRepository, ProductRepository і UnitOfWork,
  * як AddScoped&lt;IOrderRepository, ...&gt;() / AddScoped&lt;IUnitOfWork, UnitOfWork&gt;() у методичці.
+ * <p>
+ * ПР6 (DTO): реєстрація не змінилась — мапери (тепер з мапінгом в обидва боки й окремими DTO
+ * для кожної операції) так само Transient. Навіть початкові дані каталогу створюються через CreateProductRequest.
  */
 public final class InternetShopApp {
 
@@ -166,8 +170,8 @@ public final class InternetShopApp {
     /** Початкові дані для демонстрації — створюються через звичайний сценарій, тож правила діють. */
     private static void seedCatalog(CatalogUseCases catalog) {
         if (!catalog.list().isEmpty()) return;
-        catalog.create("Ноутбук 14\"", "Легкий ноутбук для навчання", new BigDecimal("32999.00"));
-        catalog.create("Бездротова миша", "2.4 ГГц, тихі кнопки", new BigDecimal("649.50"));
-        catalog.create("USB-C кабель", "1 м, 60 Вт", new BigDecimal("199"));
+        catalog.create(new CreateProductRequest("Ноутбук 14\"", "Легкий ноутбук для навчання", new BigDecimal("32999.00")));
+        catalog.create(new CreateProductRequest("Бездротова миша", "2.4 ГГц, тихі кнопки", new BigDecimal("649.50")));
+        catalog.create(new CreateProductRequest("USB-C кабель", "1 м, 60 Вт", new BigDecimal("199")));
     }
 }

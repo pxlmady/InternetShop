@@ -8,16 +8,17 @@ import com.internetshop.application.catalog.CatalogService;
 import com.internetshop.application.catalog.CatalogUseCases;
 import com.internetshop.application.catalog.ProductDtoMapper;
 import com.internetshop.application.catalog.ProductMapper;
-import com.internetshop.application.catalog.ProductDto;
 import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.catalog.ProductRepository;
 import com.internetshop.application.catalog.ProductNotFoundException;
+import com.internetshop.application.catalog.dto.CreateProductRequest;
+import com.internetshop.application.catalog.dto.CreatedProductDto;
+import com.internetshop.application.catalog.dto.ProductDto;
 import com.internetshop.application.notifications.Notification;
 import com.internetshop.application.notifications.NotificationFeed;
 import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
 import com.internetshop.application.ordering.CatalogProduct;
-import com.internetshop.application.ordering.OrderDto;
 import com.internetshop.application.ordering.OrderDtoMapper;
 import com.internetshop.application.ordering.OrderMapper;
 import com.internetshop.application.ordering.OrderNotFoundException;
@@ -25,6 +26,12 @@ import com.internetshop.application.ordering.OrderService;
 import com.internetshop.application.ordering.OrderRepository;
 import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductNotInCatalogException;
+import com.internetshop.application.ordering.dto.AddOrderItemRequest;
+import com.internetshop.application.ordering.dto.CreateOrderRequest;
+import com.internetshop.application.ordering.dto.CreatedOrderDto;
+import com.internetshop.application.ordering.dto.OrderDetailsDto;
+import com.internetshop.application.ordering.dto.OrderLineDto;
+import com.internetshop.application.ordering.dto.PlacedOrderDto;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.shared.events.Event;
@@ -60,11 +67,15 @@ import com.internetshop.webapi.endpoints.OrderEndpoints;
 import com.internetshop.webapi.endpoints.ProductEndpoints;
 import com.internetshop.webapi.endpoints.StatisticsEndpoints;
 import com.internetshop.webapi.http.ErrorMapper;
+import com.internetshop.webapi.http.Json;
 import com.internetshop.webapi.http.Router;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -81,6 +92,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -90,7 +102,8 @@ import java.util.stream.Stream;
 
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
- * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> межі шарів і контекстів -> HTTP.
+ * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> Repository і Unit of Work (ПР5) ->
+ * DTO і мапінг (ПР6) -> межі шарів і контекстів -> HTTP.
  * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
  */
@@ -127,6 +140,7 @@ public final class Checks {
             solid(tmp.resolve("solid"));
             dependencyInjection(tmp.resolve("di"));
             repositoryAndUnitOfWork(tmp.resolve("uow"));
+            dataTransferObjects(tmp.resolve("dto"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
         } finally {
@@ -183,27 +197,27 @@ public final class Checks {
         FileDataContext db = new FileDataContext(dir);
         CatalogService catalog = catalogService(db);
         OrderService orders = orderService(db, catalog, new InProcessEventBus(), CLOCK);
-        UUID productId = catalog.create("Ноутбук", "14 дюймів", new BigDecimal("30000")).id();
-        UUID orderId = orders.create(UUID.randomUUID()).id();
-        orders.addItem(orderId, productId, 1);
+        UUID productId = catalog.create(new CreateProductRequest("Ноутбук", "14 дюймів", new BigDecimal("30000"))).id();
+        UUID orderId = orders.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        orders.addItem(orderId, new AddOrderItemRequest(productId, 1));
         orders.place(orderId);
 
         // Новий контекст даних = «перезапуск застосунку»: дані читаються з файлів.
         FileDataContext db2 = new FileDataContext(dir);
         CatalogService catalog2 = catalogService(db2);
         OrderService orders2 = orderService(db2, catalog2, new InProcessEventBus(), CLOCK);
-        OrderDto saved = orders2.get(orderId);
+        OrderDetailsDto saved = orders2.get(orderId);
         check(catalog2.get(productId).name().equals("Ноутбук")
                 && saved.status().equals("PLACED") && saved.lines().size() == 1
                 && saved.lines().get(0).productName().equals("Ноутбук")
                 && saved.total().compareTo(new BigDecimal("30000")) == 0, "Data survives restart (new store instances)");
-        expect(DomainRuleException.class, () -> orders2.addItem(orderId, productId, 1), "Domain rules hold after rehydration");
+        expect(DomainRuleException.class, () -> orders2.addItem(orderId, new AddOrderItemRequest(productId, 1)), "Domain rules hold after rehydration");
         expect(OrderNotFoundException.class, () -> orders2.get(UUID.randomUUID()), "Missing order reported");
 
-        UUID draftId = orders2.create(UUID.randomUUID()).id();
-        expect(ProductNotInCatalogException.class, () -> orders2.addItem(draftId, UUID.randomUUID(), 1),
+        UUID draftId = orders2.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        expect(ProductNotInCatalogException.class, () -> orders2.addItem(draftId, new AddOrderItemRequest(UUID.randomUUID(), 1)),
                 "Ordering asks Catalog through ProductCatalog contract: unknown product rejected");
-        expect(DomainRuleException.class, () -> orders2.create(null), "Missing customer id rejected by domain");
+        expect(DomainRuleException.class, () -> orders2.create(new CreateOrderRequest(null)), "Missing customer id rejected by domain");
 
         // Імітуємо два запити (кожен зі своїм Unit of Work), які одночасно прочитали ту саму чернетку.
         FileUnitOfWork request1 = new FileUnitOfWork(db2);
@@ -227,8 +241,8 @@ public final class Checks {
                 "Product deletion survives restart");
         check(orders2.get(orderId).lines().get(0).productName().equals("Ноутбук"),
                 "Existing order keeps its snapshot after product deletion");
-        UUID anotherDraft = orders2.create(UUID.randomUUID()).id();
-        expect(ProductNotInCatalogException.class, () -> orders2.addItem(anotherDraft, productId, 1),
+        UUID anotherDraft = orders2.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        expect(ProductNotInCatalogException.class, () -> orders2.addItem(anotherDraft, new AddOrderItemRequest(productId, 1)),
                 "Deleted product cannot be added to a new order");
         expect(ProductNotFoundException.class, () -> catalog2.delete(productId), "Deleting a missing product reported");
     }
@@ -243,16 +257,16 @@ public final class Checks {
         bus.subscribe(Event.class, published::add); // «спостерігач» за всіма подіями — лише для перевірок
         OrderService orders = orderService(db, catalog, bus, CLOCK);
 
-        UUID productId = catalog.create("Миша", "", new BigDecimal("100.50")).id();
+        UUID productId = catalog.create(new CreateProductRequest("Миша", "", new BigDecimal("100.50"))).id();
         UUID customerId = UUID.randomUUID();
-        UUID orderId = orders.create(customerId).id();
+        UUID orderId = orders.create(new CreateOrderRequest(customerId)).id();
         check(published.size() == 1 && published.get(0) instanceof OrderCreated c && c.orderId().equals(orderId),
                 "Creating an order publishes OrderCreated");
 
-        orders.addItem(orderId, productId, 3);
+        orders.addItem(orderId, new AddOrderItemRequest(productId, 3));
         check(published.size() == 1, "Adding an item publishes no event");
 
-        UUID emptyId = orders.create(customerId).id();
+        UUID emptyId = orders.create(new CreateOrderRequest(customerId)).id();
         published.clear();
         expect(DomainRuleException.class, () -> orders.place(emptyId), "Empty order still rejected by domain");
         check(published.isEmpty(), "Rejected operation publishes no event");
@@ -285,12 +299,12 @@ public final class Checks {
         bus2.subscribe(OrderPlaced.class, new OrderPlacedNotificationHandler(outbox2));
         bus2.subscribe(OrderPlaced.class, new OrderPlacedStatisticsHandler(stats2));
         OrderService orders2 = orderService(db, catalog, bus2, CLOCK);
-        UUID order2 = orders2.create(customerId).id();
-        orders2.addItem(order2, productId, 1);
+        UUID order2 = orders2.create(new CreateOrderRequest(customerId)).id();
+        orders2.addItem(order2, new AddOrderItemRequest(productId, 1));
         Logger busLog = Logger.getLogger(InProcessEventBus.class.getName());
         Level previous = busLog.getLevel();
         busLog.setLevel(Level.OFF); // очікуваний збій обробника не засмічує вивід перевірок
-        OrderDto placed;
+        PlacedOrderDto placed;
         try {
             placed = orders2.place(order2);
         } finally {
@@ -313,7 +327,7 @@ public final class Checks {
         Order order = new Order(new CustomerId(UUID.randomUUID()));
         UUID mouse = UUID.randomUUID();
         order.addItem(mouse, "Миша", Money.of("100.50"), new Quantity(2));
-        OrderDto dto = ORDER_MAPPER.toDto(order);
+        OrderDetailsDto dto = ORDER_MAPPER.toDetails(order);
         check(dto.id().equals(order.getId()) && dto.status().equals("DRAFT") && dto.lines().size() == 1
                         && dto.lines().get(0).productId().equals(mouse) && dto.lines().get(0).lineTotal().compareTo(new BigDecimal("201")) == 0
                         && dto.total().compareTo(new BigDecimal("201")) == 0,
@@ -331,13 +345,13 @@ public final class Checks {
         Instant fixed = Instant.parse("2026-01-01T10:00:00Z");
         FileDataContext db = new FileDataContext(dir);
         CatalogService catalog = catalogService(db);
-        UUID productId = catalog.create("Кабель", "", new BigDecimal("199")).id();
+        UUID productId = catalog.create(new CreateProductRequest("Кабель", "", new BigDecimal("199"))).id();
         InProcessEventBus bus = new InProcessEventBus();
         List<Event> published = new ArrayList<>();
         bus.subscribe(Event.class, published::add);
         OrderService orders = orderService(db, catalog, bus, () -> fixed);
-        UUID orderId = orders.create(UUID.randomUUID()).id();
-        orders.addItem(orderId, productId, 1);
+        UUID orderId = orders.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        orders.addItem(orderId, new AddOrderItemRequest(productId, 1));
         orders.place(orderId);
         check(published.size() == 2 && published.stream().allMatch(e -> e.occurredAt().equals(fixed)),
                 "DIP: event time comes from the injected TimeProvider (testable without the system clock)");
@@ -464,10 +478,10 @@ public final class Checks {
 
         // Контейнер сам будує граф: сценарій, отриманий з області, працює з реальними залежностями.
         try (ServiceScope scope = services.createScope()) {
-            UUID productId = scope.get(CatalogUseCases.class).create("Кабель", "", new BigDecimal("199")).id();
+            UUID productId = scope.get(CatalogUseCases.class).create(new CreateProductRequest("Кабель", "", new BigDecimal("199"))).id();
             OrderUseCases orders = scope.get(OrderUseCases.class);
-            UUID orderId = orders.create(UUID.randomUUID()).id();
-            check(orders.addItem(orderId, productId, 2).total().compareTo(new BigDecimal("398")) == 0,
+            UUID orderId = orders.create(new CreateOrderRequest(UUID.randomUUID())).id();
+            check(orders.addItem(orderId, new AddOrderItemRequest(productId, 2)).total().compareTo(new BigDecimal("398")) == 0,
                     "Use case resolved from the container works end to end");
         }
 
@@ -616,14 +630,104 @@ public final class Checks {
         UnitOfWork counting = () -> { saves.incrementAndGet(); real.saveChanges(); };
         OrderService service = new OrderService(new FileOrderRepository(db, real), counting,
                 new CatalogProductAdapter(catalogService(db)), new InProcessEventBus(), CLOCK, ORDER_MAPPER);
-        UUID orderId = service.create(UUID.randomUUID()).id();
-        service.addItem(orderId, mouse.getId(), 2);
+        UUID orderId = service.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        service.addItem(orderId, new AddOrderItemRequest(mouse.getId(), 2));
         service.place(orderId);
         service.list();
         service.get(orderId);
         check(saves.get() == 3 && new FileOrderRepository(new FileDataContext(dir), new FileUnitOfWork(db)).findById(orderId)
                         .map(o -> o.getStatus() == OrderStatus.PLACED && o.getLines().size() == 1).orElse(false),
                 "Business operations still work: each one is saved by exactly one saveChanges, reads save nothing");
+    }
+
+    // ---------------- ПР6: DTO та мапінг між шарами ----------------
+
+    /** Усі DTO прикладного шару: вхідні (запити) і вихідні (результати операцій). */
+    private static final List<Class<?>> DTOS = List.of(CreateOrderRequest.class, AddOrderItemRequest.class,
+            OrderDetailsDto.class, OrderLineDto.class, CreatedOrderDto.class, PlacedOrderDto.class,
+            CreateProductRequest.class, ProductDto.class, CreatedProductDto.class);
+
+    private static void dataTransferObjects(Path dir) {
+        // DTO — прості структури даних: незмінні record, лише прості типи, без доменних класів.
+        check(DTOS.stream().allMatch(c -> c.isRecord() && Arrays.stream(c.getRecordComponents())
+                        .map(RecordComponent::getGenericType).map(Type::getTypeName)
+                        .noneMatch(t -> t.contains("com.internetshop.domain"))),
+                "DTO are plain records without domain types (Money, Quantity, CustomerId, Order...)");
+        // DTO без бізнес-логіки: окрім аксесорів полів — лише згенеровані equals/hashCode/toString.
+        Set<String> generated = Set.of("equals", "hashCode", "toString");
+        check(DTOS.stream().allMatch(c -> Arrays.stream(c.getDeclaredMethods())
+                        .filter(m -> !m.isSynthetic() && !generated.contains(m.getName()))
+                        .allMatch(m -> m.getParameterCount() == 0 && Arrays.stream(c.getRecordComponents())
+                                .anyMatch(rc -> rc.getName().equals(m.getName())))),
+                "DTO contain no business logic (only field accessors)");
+
+        // Межа прикладного шару: у сигнатурах сценаріїв лише DTO і Id, жодного доменного класу.
+        List<Method> boundary = new ArrayList<>();
+        for (Class<?> c : List.of(OrderUseCases.class, CatalogUseCases.class, ProductQueries.class))
+            boundary.addAll(Arrays.asList(c.getMethods()));
+        check(boundary.stream().allMatch(m -> !m.getGenericReturnType().getTypeName().contains("com.internetshop.domain")
+                        && Arrays.stream(m.getGenericParameterTypes()).noneMatch(t -> t.getTypeName().contains("com.internetshop.domain"))),
+                "Use case interfaces accept and return only DTO (no domain entities cross the boundary)");
+
+        // Окремий DTO для кожної бізнес-операції, а не один OrderDto на всі випадки.
+        try {
+            check(OrderUseCases.class.getMethod("create", CreateOrderRequest.class).getReturnType() == CreatedOrderDto.class
+                            && OrderUseCases.class.getMethod("place", UUID.class).getReturnType() == PlacedOrderDto.class
+                            && OrderUseCases.class.getMethod("get", UUID.class).getReturnType() == OrderDetailsDto.class
+                            && OrderUseCases.class.getMethod("addItem", UUID.class, AddOrderItemRequest.class).getReturnType() == OrderDetailsDto.class
+                            && CatalogUseCases.class.getMethod("create", CreateProductRequest.class).getReturnType() == CreatedProductDto.class,
+                    "Each business operation has its own request/result DTO");
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError("FAIL: use case signatures do not use request DTO", e);
+        }
+
+        // Мапінг домен -> DTO: прості типи замість Value Objects; лише потрібні сценарію поля.
+        Order order = new Order(new CustomerId(UUID.randomUUID()));
+        order.addItem(UUID.randomUUID(), "Миша", Money.of("100.50"), new Quantity(2));
+        order.addItem(UUID.randomUUID(), "Кабель", Money.of("10"), new Quantity(1));
+        OrderDetailsDto details = ORDER_MAPPER.toDetails(order);
+        check(details.lines().size() == 2 && details.lines().get(0).unitPrice().compareTo(new BigDecimal("100.50")) == 0
+                        && details.lines().get(0).quantity() == 2 && details.total().compareTo(new BigDecimal("211")) == 0,
+                "Mapping: Money/Quantity become BigDecimal/int in OrderDetailsDto");
+        order.place();
+        PlacedOrderDto placed = ORDER_MAPPER.toPlaced(order);
+        CreatedOrderDto created = ORDER_MAPPER.toCreated(order);
+        check(placed.itemCount() == 3 && placed.status().equals("PLACED") && placed.total().compareTo(new BigDecimal("211")) == 0
+                        && created.id().equals(order.getId()) && CreatedOrderDto.class.getRecordComponents().length == 2,
+                "Mapping: PlacedOrderDto carries item count and total; CreatedOrderDto only Id and status");
+        check(Arrays.stream(OrderDetailsDto.class.getRecordComponents()).noneMatch(c -> c.getName().equals("customerId") || c.getName().equals("version")),
+                "Only needed data: order DTO does not expose customer id or the internal version");
+
+        // Мапінг DTO -> домен: правила перевіряє Domain, а не DTO.
+        Product product = PRODUCT_MAPPER.toNewProduct(new CreateProductRequest("  Миша ", "тиха", new BigDecimal("649.50")));
+        check(product.getName().value().equals("Миша") && PRODUCT_MAPPER.toCreated(product).name().equals("Миша")
+                        && PRODUCT_MAPPER.toDto(product).price().compareTo(new BigDecimal("649.50")) == 0,
+                "Mapping: CreateProductRequest -> Product -> DTO (name normalized by the domain)");
+        reject(() -> PRODUCT_MAPPER.toNewProduct(new CreateProductRequest(" ", "", BigDecimal.ONE)),
+                "Invalid request DTO rejected by domain rules during mapping");
+        reject(() -> ORDER_MAPPER.toNewOrder(new CreateOrderRequest(new UUID(0, 0))),
+                "Empty customer id in request DTO rejected by domain during mapping");
+
+        // Вебшар не може віддати доменний об'єкт назовні: серіалізатор приймає лише DTO.
+        expect(IllegalArgumentException.class, () -> Json.write(order), "JSON refuses a domain entity (Order)");
+        expect(IllegalArgumentException.class, () -> Json.write(Map.of("price", Money.of("1"))),
+                "JSON refuses a domain value object (Money) even inside a map");
+        expect(IllegalArgumentException.class, () -> Json.write(new Object()), "JSON does not serialize unknown types via toString()");
+        check(Json.write(new CreatedProductDto(new UUID(0, 1), "Миша"))
+                        .equals("{\"id\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"Миша\"}"),
+                "JSON writes a DTO record with exactly its fields");
+
+        // Наскрізний сценарій через DTO працює як раніше.
+        FileDataContext db = new FileDataContext(dir);
+        CatalogService catalog = catalogService(db);
+        OrderService orders = orderService(db, catalog, new InProcessEventBus(), CLOCK);
+        UUID productId = catalog.create(new CreateProductRequest("Ноутбук", "", new BigDecimal("30000"))).id();
+        UUID orderId = orders.create(new CreateOrderRequest(UUID.randomUUID())).id();
+        OrderDetailsDto cart = orders.addItem(orderId, new AddOrderItemRequest(productId, 2));
+        PlacedOrderDto result = orders.place(orderId);
+        check(cart.total().compareTo(new BigDecimal("60000")) == 0 && result.itemCount() == 2
+                        && orders.get(orderId).status().equals("PLACED") && orders.list().size() == 1,
+                "Order scenario works end to end with request and result DTO");
     }
 
     /** Читання «після перезапуску»: новий контекст даних над тими самими файлами. */
@@ -701,6 +805,14 @@ public final class Checks {
         check(sourcesOf(application).stream().noneMatch(src -> src.contains("Mapper.toDto(") || src.contains("Mapper::toDto"))
                         && ProductMapper.class.isInterface() && OrderMapper.class.isInterface(),
                 "DI: mappers are injected abstractions, not static calls");
+
+        // ПР6: ендпоінти працюють лише з DTO, а самі DTO не залежать від доменної моделі.
+        check(importsOf(webapi.resolve("endpoints")).stream().noneMatch(i -> i.startsWith("com.internetshop.domain")),
+                "DTO: HTTP endpoints do not import domain classes");
+        List<String> dtoImports = new ArrayList<>(importsOf(application.resolve("com/internetshop/application/ordering/dto")));
+        dtoImports.addAll(importsOf(application.resolve("com/internetshop/application/catalog/dto")));
+        check(dtoImports.stream().allMatch(i -> i.startsWith("java.")),
+                "DTO: DTO packages depend only on the JDK (no domain classes inside)");
     }
 
     private static List<String> sourcesOf(Path dir) throws IOException {
@@ -747,6 +859,8 @@ public final class Checks {
                     "{\"customerId\":\"" + UUID.randomUUID() + "\"}");
             String orderId = field(order.body(), "id");
             check(order.statusCode() == 201 && order.body().contains("\"DRAFT\""), "POST /orders -> 201 DRAFT");
+            check(order.body().equals("{\"id\":\"" + orderId + "\",\"status\":\"DRAFT\"}"),
+                    "POST /orders returns CreatedOrderDto: only id and status");
 
             HttpResponse<String> tooMany = send(client, "POST", base + "/orders/" + orderId + "/items", "application/json",
                     "{\"productId\":\"" + productId + "\",\"quantity\":100}");
@@ -758,10 +872,17 @@ public final class Checks {
 
             HttpResponse<String> placed = send(client, "POST", base + "/orders/" + orderId + "/place", "application/json", "{}");
             check(placed.statusCode() == 200 && placed.body().contains("\"PLACED\""), "Order placed via HTTP");
+            check(placed.body().contains("\"itemCount\":2") && !placed.body().contains("\"lines\""),
+                    "POST /orders/{id}/place returns PlacedOrderDto (item count, no lines)");
+            HttpResponse<String> allOrders = send(client, "GET", base + "/orders", null, null);
+            check(allOrders.statusCode() == 200 && allOrders.body().contains(orderId) && allOrders.body().contains("\"lines\"")
+                            && !allOrders.body().contains("customerId") && !allOrders.body().contains("version"),
+                    "GET /orders returns DTO without customer ids or internal version (no data leak)");
 
             HttpResponse<String> notifications = send(client, "GET", base + "/notifications", null, null);
             check(notifications.statusCode() == 200 && notifications.body().contains(orderId)
-                    && notifications.body().contains("21.00"), "GET /notifications shows reaction to OrderPlaced");
+                    && notifications.body().contains("21.00") && !notifications.body().contains("customerId"),
+                    "GET /notifications shows reaction to OrderPlaced without exposing customer ids");
             HttpResponse<String> statistics = send(client, "GET", base + "/statistics", null, null);
             check(statistics.statusCode() == 200 && statistics.body().contains("\"ordersCreated\":1")
                     && statistics.body().contains("\"ordersPlaced\":1") && statistics.body().contains("\"revenue\":21.00"),

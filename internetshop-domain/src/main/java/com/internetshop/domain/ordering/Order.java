@@ -77,6 +77,13 @@ public final class Order extends Entity {
         return sum;
     }
 
+    /** Загальна кількість одиниць товару в замовленні (сума кількостей усіх рядків). */
+    public int itemCount() {
+        int count = 0;
+        for (OrderLine line : lines) count += line.getQuantity().value();
+        return count;
+    }
+
     /** Перевірка до зміни стану: агрегат не повинен опинитися в недопустимому стані. */
     private void ensureTotalWithinLimit(Money unitPrice, Quantity quantity) {
         if (unitPrice == null) return; // відсутню ціну відхилить OrderLine

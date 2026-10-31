@@ -1,11 +1,15 @@
 package com.internetshop.application.ordering;
 
+import com.internetshop.application.ordering.dto.AddOrderItemRequest;
+import com.internetshop.application.ordering.dto.CreateOrderRequest;
+import com.internetshop.application.ordering.dto.CreatedOrderDto;
+import com.internetshop.application.ordering.dto.OrderDetailsDto;
+import com.internetshop.application.ordering.dto.PlacedOrderDto;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
-import com.internetshop.domain.ordering.CustomerId;
 import com.internetshop.domain.ordering.Order;
 import com.internetshop.domain.ordering.Quantity;
 import com.internetshop.domain.shared.Money;
@@ -30,6 +34,10 @@ import java.util.UUID;
  * ПР5 (Repository + Unit of Work): сервіс працює лише з абстракціями OrderRepository і UnitOfWork.
  * Кожен сценарій: репозиторій → доменна дія → repository.add/update → unitOfWork.saveChanges() → подія.
  * Подія публікується лише після успішного saveChanges, тобто тоді, коли зміни вже збережено.
+ * <p>
+ * ПР6 (DTO + мапінг): сервіс приймає DTO запитів і повертає DTO результатів. Агрегат Order живе лише
+ * всередині методу: мапер створює його з CreateOrderRequest і перетворює на DTO, потрібний саме цьому
+ * сценарію (CreatedOrderDto, OrderDetailsDto, PlacedOrderDto). Назовні доменні об'єкти не виходять.
  */
 public final class OrderService implements OrderUseCases {
 
@@ -51,47 +59,48 @@ public final class OrderService implements OrderUseCases {
     }
 
     @Override
-    public List<OrderDto> list() {
-        return orders.findAll().stream().map(mapper::toDto).toList();
+    public List<OrderDetailsDto> list() {
+        return orders.findAll().stream().map(mapper::toDetails).toList();
     }
 
     @Override
-    public OrderDto get(UUID id) {
-        return mapper.toDto(load(id));
+    public OrderDetailsDto get(UUID id) {
+        return mapper.toDetails(load(id));
     }
 
     @Override
-    public OrderDto create(UUID customerId) {
-        Order order = new Order(new CustomerId(customerId));
+    public CreatedOrderDto create(CreateOrderRequest request) {
+        Order order = mapper.toNewOrder(request); // DTO → домен; правила перевіряє Order / CustomerId
         orders.add(order);
         unitOfWork.saveChanges();
         // Подія публікується лише після збереження: вона фіксує факт, який уже відбувся.
         events.publish(new OrderCreated(order.getId(), time.now()));
-        return mapper.toDto(order);
+        return mapper.toCreated(order);
     }
 
     @Override
-    public OrderDto addItem(UUID orderId, UUID productId, int quantity) {
+    public OrderDetailsDto addItem(UUID orderId, AddOrderItemRequest request) {
+        Objects.requireNonNull(request);
         Order order = load(orderId);
         // Дані про товар отримуємо з іншого контексту лише через контракт ProductCatalog.
+        UUID productId = request.productId();
         CatalogProduct product = (productId == null ? null : catalog.findProduct(productId).orElse(null));
         if (product == null) throw new ProductNotInCatalogException();
-        order.addItem(product.id(), product.name(), new Money(product.price()), new Quantity(quantity));
+        order.addItem(product.id(), product.name(), new Money(product.price()), new Quantity(request.quantity()));
         orders.update(order);
         unitOfWork.saveChanges();
-        return mapper.toDto(order);
+        return mapper.toDetails(order);
     }
 
     @Override
-    public OrderDto place(UUID orderId) {
+    public PlacedOrderDto place(UUID orderId) {
         Order order = load(orderId);
         order.place();
         orders.update(order);
         unitOfWork.saveChanges();
-        int itemCount = order.getLines().stream().mapToInt(l -> l.getQuantity().value()).sum();
-        events.publish(new OrderPlaced(order.getId(), order.getCustomerId().value(), itemCount,
+        events.publish(new OrderPlaced(order.getId(), order.getCustomerId().value(), order.itemCount(),
                 order.total().amount(), time.now()));
-        return mapper.toDto(order);
+        return mapper.toPlaced(order);
     }
 
     private Order load(UUID id) {

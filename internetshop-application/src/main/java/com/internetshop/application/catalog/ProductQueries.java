@@ -1,5 +1,7 @@
 package com.internetshop.application.catalog;
 
+import com.internetshop.application.catalog.dto.ProductDto;
+
 import java.util.List;
 import java.util.UUID;
 

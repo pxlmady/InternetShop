@@ -1,11 +1,12 @@
-# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work
+# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work, DTO
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
 - №2 — **Event-Driven Design** (події та обробники, див. [розділ ПР2](#практична-робота-2-event-driven-design));
 - №3 — **Принципи SOLID** (аналіз порушень і рефакторинг, див. [розділ ПР3](#практична-робота-3-принципи-solid));
 - №4 — **Dependency Injection та інверсія керування** (DI-контейнер і життєві цикли, див. [розділ ПР4](#практична-робота-4-dependency-injection-та-інверсія-керування));
-- №5 — **Repository та Unit of Work** (див. [розділ ПР5](#практична-робота-5-repository-та-unit-of-work)).
+- №5 — **Repository та Unit of Work** (див. [розділ ПР5](#практична-робота-5-repository-та-unit-of-work));
+- №6 — **Об'єкти передавання даних (DTO) та мапінг між шарами** (див. [розділ ПР6](#практична-робота-6-обєкти-передавання-даних-dto-та-мапінг-між-шарами)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -200,6 +201,11 @@ return mapper.toDto(order);                                    // 6. DTO для 
 
 Для POST потрібен заголовок `Content-Type: application/json`.
 
+Після ПР6 тіло кожної відповіді — це DTO конкретної операції: `POST /orders` → `CreatedOrderDto` (`id`, `status`),
+`GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/items` → `OrderDetailsDto` (`id`, `status`, `lines`, `total`),
+`POST /orders/{id}/place` → `PlacedOrderDto` (`id`, `status`, `itemCount`, `total`), `GET /products...` → `ProductDto`,
+`POST /products` → `CreatedProductDto` (`id`, `name`).
+
 | Ситуація | Статус | Звідки |
 |---|---|---|
 | Порушено бізнес-правило | 400 | `DomainRuleException` |
@@ -220,6 +226,9 @@ return mapper.toDto(order);                                    // 6. DTO для 
 - POST приймається тільки з `Content-Type: application/json`, а це базовий захист від CSRF-запитів зі сторонніх сайтів.
 - Тіло запиту обмежене 16 КБ, глибина вкладеності JSON — 20 рівнями, суми — межею `Money`.
 - Символи `< > &` у JSON екрануються; сторінка виводить дані лише через `textContent` і має заголовок `Content-Security-Policy`.
+- ПР6: назовні передаються лише DTO з потрібними полями. Ідентифікатори покупців і внутрішня версія агрегату у відповідях
+  не з'являються (раніше `GET /orders` і `GET /notifications` показували `customerId` усіх покупців). Серіалізатор JSON
+  відмовляється записувати доменні об'єкти й невідомі типи, тож випадково «віддати» сутність через `toString()` неможливо.
 - Робочі дані (`data/`) і результати збірки (`target/`) виключені з Git.
 
 ## Практична робота №2: Event-Driven Design
@@ -419,6 +428,54 @@ flowchart LR
 не виходять за межі пакета `infrastructure.persistence`; імена методів — операції над колекцією (`add`, `findById`, `update`, `remove`);
 події ПР2 публікуються лише після успішного `saveChanges`, DI ПР4 збирає репозиторії та Unit of Work через конструктори.
 
+## Практична робота №6: Об'єкти передавання даних (DTO) та мапінг між шарами
+
+Завдання: проаналізувати взаємодію прикладного рівня з вебінтерфейсом, виділити DTO для бізнес-операцій, реалізувати мапінг
+між доменною моделлю та DTO і змінити ендпоінти так, щоб вони працювали виключно з DTO.
+Бізнес-правила, формат файлів даних, адреси HTTP API і вебсторінка не змінилися; 112 перевірок ПР1–ПР5 проходять
+(змінено лише виклики сценаріїв — тепер через DTO запитів), додано 20 нових.
+
+| Вимога методички | Реалізація |
+|---|---|
+| 1. Проаналізувати взаємодію Application ↔ WebApi | До ПР6: один `OrderDto` на всі 5 операцій (створення, список, перегляд, додавання, оформлення), вхідних DTO немає — сценарії приймали розрізнені параметри (`create(UUID)`, `addItem(UUID, UUID, int)`), ендпоінти вручну перекладали DTO у `Map`, а у відповідях були зайві дані (`customerId` у `GET /orders` і `GET /notifications`) |
+| 2. Виділити DTO для бізнес-операцій | Пакети `application/ordering/dto` і `application/catalog/dto`: вхідні `CreateOrderRequest`, `AddOrderItemRequest`, `CreateProductRequest`; вихідні `CreatedOrderDto`, `OrderDetailsDto` (+ `OrderLineDto`), `PlacedOrderDto`, `ProductDto`, `CreatedProductDto` |
+| 3. Мапінг домен ↔ DTO | Ручний мапінг у прикладному шарі, в окремих компонентах `OrderDtoMapper` / `ProductDtoMapper` (за інтерфейсами `OrderMapper` / `ProductMapper`): DTO → домен (`toNewOrder`, `toNewProduct`) і домен → DTO (`toDetails`, `toCreated`, `toPlaced`, `toDto`) |
+| 4. Контролери/API лише з DTO | `OrderEndpoints`, `ProductEndpoints`: JSON запиту → DTO запиту → сценарій → DTO результату, який повертається як є (`Response.ok(dto)`, аналог `return Ok(result)`); `Json` серіалізує DTO-записи за їхніми полями |
+| 5. Немає передачі доменних сутностей назовні | Сигнатури `OrderUseCases` / `CatalogUseCases` / `ProductQueries` містять лише DTO та `UUID`; ендпоінти не імпортують Domain; `Json` кидає помилку на доменний об'єкт (→ 500 без деталей) |
+| 6. Перевірити коректність | `mvn verify`: 132 перевірки (112 з ПР1–ПР5 + 20 нових), вебсторінка працює без змін |
+
+```mermaid
+flowchart LR
+    subgraph WebApi
+        EP[OrderEndpoints] -- "CreateOrderRequest,<br/>AddOrderItemRequest" --> UC
+        UC -- "CreatedOrderDto, OrderDetailsDto,<br/>PlacedOrderDto" --> EP
+        EP --> JSON[Json: record → JSON,<br/>доменні класи заборонені]
+    end
+    subgraph Application
+        UC[[OrderUseCases]] --- OS[OrderService]
+        OS -- "DTO ↔ Order" --> M[[OrderMapper]] --- MI[OrderDtoMapper]
+    end
+    subgraph Domain
+        O[Order, Money, Quantity, CustomerId]
+    end
+    OS --> O
+    MI --> O
+```
+
+| Операція | Вхід | Вихід | Що навмисно не передається |
+|---|---|---|---|
+| `POST /orders` | `CreateOrderRequest(customerId)` | `CreatedOrderDto(id, status)` | рядки, сума (у нового замовлення їх немає) |
+| `GET /orders`, `GET /orders/{id}` | Id з адреси | `OrderDetailsDto(id, status, lines, total)` | `customerId`, `version`, внутрішні Id рядків |
+| `POST /orders/{id}/items` | `AddOrderItemRequest(productId, quantity)` | `OrderDetailsDto` — клієнт показує оновлений кошик | назву й ціну клієнт не передає: їх бере Ordering з каталогу |
+| `POST /orders/{id}/place` | Id з адреси | `PlacedOrderDto(id, status, itemCount, total)` | перелік рядків |
+| `POST /products` | `CreateProductRequest(name, description, price)` | `CreatedProductDto(id, name)` | — |
+| `GET /products...` | Id з адреси | `ProductDto(id, name, description, price)` | Value Objects `ProductName`, `Money` (лише `String` / `BigDecimal`) |
+
+Методичні вказівки: DTO — незмінні `record` без бізнес-логіки (перевірки виконує Domain під час мапінгу DTO → домен);
+кожна операція має власний DTO, а спільний `OrderDetailsDto` використовують лише сценарії «показати кошик»;
+мапінг — у прикладному шарі в окремих компонентах, зареєстрованих у DI-контейнері як Transient (ПР4); DTO не залежать від Domain
+і узгоджені з попередніми роботами (події ПР2 і так були простими даними, Repository + Unit of Work ПР5 працюють з агрегатами всередині сервісів).
+
 ## Запуск
 
 Потрібен **JDK 21** або новіший і **Maven 3.9+** (у IntelliJ IDEA Maven вбудований).
@@ -431,12 +488,12 @@ flowchart LR
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 112 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 132 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 112 перевірок
+mvn verify                                         # збірка всіх модулів + 132 перевірки
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -480,6 +537,10 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
   цикл і повторна реєстрація відхиляються; через HTTP: одна область на запит, закривається після відповіді;
   ендпоінти й сервіси мають у конструкторах лише інтерфейси; контейнер не імпортується поза `InternetShopApp`/`Router`,
   сервіси, сховища й мапери не створюються через `new` усередині інших класів, мапери не викликаються статично.
+- **DTO (ПР6):** DTO — `record` без доменних типів і без логіки; сигнатури сценаріїв містять лише DTO; окремий DTO на операцію;
+  мапінг домен → DTO (Value Objects → прості типи, лише потрібні поля) і DTO → домен (правила перевіряє Domain);
+  `Json` відмовляється серіалізувати `Order`, `Money` і невідомі типи; ендпоінти не імпортують Domain, пакети `dto` — лише JDK;
+  через HTTP: `POST /orders` повертає лише `id` і `status`, `place` — `itemCount` без рядків, `GET /orders` і `GET /notifications` без `customerId`.
 - **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
@@ -496,8 +557,10 @@ InternetShop/
 │   └── src/main/java/com/internetshop/application/
 │       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3), UnitOfWork (ПР5)
 │       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
-│       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductRepository (ПР5), ProductDto, ...
-│       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderRepository (ПР5), ProductCatalog, CatalogProduct, OrderDto, ...
+│       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductRepository (ПР5), ...
+│       │   └── dto/       ProductDto, CreateProductRequest, CreatedProductDto   (ПР6)
+│       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderRepository (ПР5), ProductCatalog, CatalogProduct, ...
+│       │   ├── dto/       CreateOrderRequest, AddOrderItemRequest, CreatedOrderDto, OrderDetailsDto, OrderLineDto, PlacedOrderDto (ПР6)
 │       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
 │       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
 │       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2), SalesReport (ПР4)
@@ -549,10 +612,14 @@ InternetShop/
 | ПР5: `IOrderRepository` + `IUnitOfWork` в Application | `OrderRepository`, `ProductRepository`, `UnitOfWork` в Application |
 | ПР5: `AppDbContext`, `UnitOfWork`, репозиторій в Infrastructure/Persistence | `FileDataContext`, `FileUnitOfWork`, `FileOrderRepository`, `FileProductRepository` |
 | ПР5: `_repo.AddAsync(order); _uow.SaveChangesAsync()` | `orders.add(order); unitOfWork.saveChanges();` в `OrderService` |
+| ПР6: `Application/Orders/Dto/OrderDto` (`sealed record`) | `application/ordering/dto/*` — `record` (незмінні, без логіки) |
+| ПР6: `CreateOrderCommand` у `Create(CreateOrderCommand command, ...)` | `CreateOrderRequest`, `AddOrderItemRequest`, `CreateProductRequest` |
+| ПР6: `return Ok(result); // повертаємо DTO` | `return Response.ok(orders.place(id));` — `Json` серіалізує DTO-запис |
+| ПР6: мапінг вручну / AutoMapper | Ручний мапінг у `OrderDtoMapper` / `ProductDtoMapper` (без сторонніх бібліотек) |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
-роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3) переходу на DI-контейнер (ПР4) і на Repository + Unit of Work (ПР5) поведінка не змінилася. Усі 112 перевірок проходять.
+роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3), переходу на DI-контейнер (ПР4), на Repository + Unit of Work (ПР5) і на DTO для кожної операції (ПР6) поведінка не змінилася. Усі 132 перевірки проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.

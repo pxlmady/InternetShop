@@ -1,19 +1,28 @@
 package com.internetshop.webapi.http;
 
+import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Мінімальний JSON-парсер і серіалізатор (у стандартній бібліотеці Java його немає).
  * Технічна деталь вебшару: Domain та Application про JSON нічого не знають.
  * Об'єкт → Map, масив → List, число → BigDecimal, рядок → String, true/false → Boolean, null → null.
+ * <p>
+ * ПР6 (DTO): DTO-записи (record) серіалізуються в JSON-об'єкт з полями рівно в тому складі й порядку,
+ * що й компоненти запису, тому DTO і є контрактом відповіді. Доменні об'єкти (пакет com.internetshop.domain)
+ * серіалізувати заборонено: спроба віддати їх назовні завершується помилкою (клієнт отримає 500 без деталей),
+ * а невідомі типи не перетворюються «як вийде» через toString(), щоб випадково не розкрити внутрішні дані.
  */
 public final class Json {
 
     private static final int MAX_DEPTH = 20;
+    private static final String DOMAIN_PACKAGE = "com.internetshop.domain";
 
     private Json() { }
 
@@ -52,9 +61,36 @@ public final class Json {
                 write(list.get(i), sb);
             }
             sb.append(']');
+        } else if (value.getClass().getPackageName().startsWith(DOMAIN_PACKAGE)) {
+            throw new IllegalArgumentException("Доменний об'єкт " + value.getClass().getSimpleName()
+                    + " не можна передавати за межі застосунку: потрібен DTO.");
+        } else if (value instanceof Record r) {
+            writeRecord(r, sb);
+        } else if (value instanceof UUID || value instanceof Instant) {
+            writeString(value.toString(), sb);
         } else {
-            writeString(value.toString(), sb); // UUID, enum тощо
+            throw new IllegalArgumentException("Тип " + value.getClass().getName() + " не підтримується серіалізацією.");
         }
+    }
+
+    /** DTO-запис → JSON-об'єкт: ім'я компонента → значення, у порядку оголошення. */
+    private static void writeRecord(Record r, StringBuilder sb) {
+        sb.append('{');
+        boolean first = true;
+        for (RecordComponent c : r.getClass().getRecordComponents()) {
+            Object componentValue;
+            try {
+                componentValue = c.getAccessor().invoke(r);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Не вдалося прочитати поле " + c.getName(), e);
+            }
+            if (!first) sb.append(',');
+            first = false;
+            writeString(c.getName(), sb);
+            sb.append(':');
+            write(componentValue, sb);
+        }
+        sb.append('}');
     }
 
     private static void writeString(String s, StringBuilder sb) {
