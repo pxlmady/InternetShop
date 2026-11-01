@@ -1,4 +1,4 @@
-# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work, DTO, архітектурні стилі, валідація
+# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work, DTO, архітектурні стилі, валідація, кешування
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
@@ -8,7 +8,8 @@
 - №5 — **Repository та Unit of Work** (див. [розділ ПР5](#практична-робота-5-repository-та-unit-of-work));
 - №6 — **Об'єкти передавання даних (DTO) та мапінг між шарами** (див. [розділ ПР6](#практична-робота-6-обєкти-передавання-даних-dto-та-мапінг-між-шарами));
 - №7 — **Архітектурні стилі та компроміси в розподілених системах** (аналіз стилю, порівняння з мікросервісами, див. [розділ ПР7](#практична-робота-7-архітектурні-стилі-та-компроміси-в-розподілених-системах));
-- №8 — **Валідація даних у прикладному рівні (FluentValidation)** (валідатори DTO, автоматична перевірка до use-case, див. [розділ ПР8](#практична-робота-8-валідація-даних-у-прикладному-рівні-fluentvalidation)).
+- №8 — **Валідація даних у прикладному рівні (FluentValidation)** (валідатори DTO, автоматична перевірка до use-case, див. [розділ ПР8](#практична-робота-8-валідація-даних-у-прикладному-рівні-fluentvalidation));
+- №9 — **Кешування в архітектурі програмних систем** (distributed-кеш Memcached, cache-aside, TTL та інвалідація, див. [розділ ПР9](#практична-робота-9-кешування-в-архітектурі-програмних-систем-memcached)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -236,6 +237,9 @@ return mapper.toDto(order);                                    // 6. DTO для 
   відмовляється записувати доменні об'єкти й невідомі типи, тож випадково «віддати» сутність через `toString()` неможливо.
 - ПР8: некоректні вхідні дані відхиляються до виконання сценарію, тож нічого не зберігається. У відповіді з помилками
   валідації лише назви полів і тексти правил — значення, які надіслав клієнт, назад не повертаються.
+- ПР9: у Memcached потрапляє лише `OrderDetailsDto` (без `customerId` і версії агрегату). Memcached не має автентифікації,
+  тому в `docker-compose.yml` його порт відкрито лише на `127.0.0.1`; ключі кешу перевіряються (без пробілів і керувальних
+  символів — неможливо «вставити» іншу команду протоколу), а в журнал при недоступності кешу не пишуться ні ключі, ні значення.
 - Робочі дані (`data/`) і результати збірки (`target/`) виключені з Git.
 
 ## Практична робота №2: Event-Driven Design
@@ -691,10 +695,142 @@ new Router(...).useModelValidation(s.get(AutoValidation.class))
 ендпоінти не містять перевірок. Через HTTP: 400 зі структурованими `errors`, значення клієнта не повертаються,
 некоректний запит нічого не зберігає, дубль назви, `POST /orders` без `customerId`, неіснуючий товар + кількість 0 разом.
 
+## Практична робота №9: Кешування в архітектурі програмних систем (Memcached)
+
+Мета: зменшити кількість звернень до сховища для частих читань за допомогою **розподіленого кешу** і при цьому
+контролювати узгодженість даних (TTL + явна інвалідація), не змішуючи кешування з бізнес-логікою.
+
+| Завдання методички | Де виконано |
+|---|---|
+| 1. Проаналізувати сценарії доступу до даних | Таблиця [Сценарії доступу до даних](#сценарії-доступу-до-даних) нижче |
+| 2. Визначити операцію для кешування | `GET /orders/{id}` (перегляд кошика/замовлення) → `OrderUseCases.get` |
+| 3. Distributed-кешування з Memcached | Сервер Memcached у Docker (`docker-compose.yml`); клієнт `MemcachedDistributedCache` (Infrastructure) за абстракцією `DistributedCache` (Application); реєстрація в DI — `InternetShopApp` |
+| 4. Отримання з кешу з fallback до БД | `OrderQueryService.getById`: кеш `order:{id}` → якщо промах, `OrderRepository.findById` → запис у кеш з TTL 60 с |
+| 5. Інвалідація після зміни | `CachedOrderUseCases.addItem` / `place`: після успішного `saveChanges()` — `OrderQueryService.evict(id)` (`delete order:{id}`) |
+| 6. Аналіз впливу на узгодженість | Розділ [Узгодженість і компроміси](#узгодженість-і-компроміси) |
+| Закріплення | 22 нові перевірки (`Checks.caching` + межі шарів); `mvn verify`: 180 перевірок |
+
+### Сценарії доступу до даних
+
+| Операція | Частота | Як змінюється результат | Рішення |
+|---|---|---|---|
+| `GET /orders/{id}` — кошик / замовлення | найчастіша: клієнт перечитує кошик після кожної дії й під час оформлення | лише через `addItem` і `place` цього ж замовлення | **кешувати** (ключ `order:{id}`, TTL 60 с, інвалідація після змін) |
+| `GET /orders` — усі замовлення | рідко (адміністрування, демо) | при кожному `create`, `addItem`, `place` будь-якого замовлення | не кешувати: інвалідація майже на кожен запит, виграшу немає |
+| `GET /products`, `/products/{id}` | часто | `create` / `delete` товару | можна було б кешувати, але методичка вимагає один компонент; каталог малий і вже в пам'яті `FileDataContext` |
+| `POST` — створення, додавання, оформлення | — | це зміни | не кешуються (кешуються лише читання); після змін — інвалідація |
+| `/statistics`, `/notifications` | рідко | після кожної події | живуть у пам'яті процесу, кеш зайвий |
+
+Результат `GET /orders/{id}` залежить **лише від агрегату `Order`**: назва й ціна товару в рядку — «знімок» на момент додавання (ПР1),
+тож зміна чи видалення товару в каталозі кешоване замовлення не робить застарілим. Усі причини застарілості відомі — це
+`addItem` і `place`, тому інвалідація проста і надійна.
+
+### Як це працює (cache-aside)
+
+```text
+GET /orders/{id} → OrderEndpoints → OrderUseCases (= CachedOrderUseCases, декоратор)
+   → OrderQueryService.getById(id)
+        1. DistributedCache.get("order:{id}")        влучання → десеріалізація → DTO (сховище не читається)
+        2. промах / кеш недоступний → OrderRepository.findById(id) → OrderMapper.toDetails → DTO
+        3. DistributedCache.set("order:{id}", DTO, TTL 60 с)   відсутнє замовлення не кешується → 404
+
+POST /orders/{id}/items | /place → CachedOrderUseCases → OrderService (Domain → saveChanges → подія)
+   → лише після успіху: OrderQueryService.evict(id) → DistributedCache.remove("order:{id}")
+```
+
+```java
+// Application: OrderQueryService — аналог з методички (IMemcachedClient → DistributedCache, JsonSerializer → OrderDetailsCacheFormat)
+public Optional<OrderDetailsDto> getById(UUID id) {
+    String key = cacheKey(id);                                         // "order:{id}"
+    Optional<OrderDetailsDto> cached = cache.get(key).flatMap(OrderDetailsCacheFormat::read);
+    if (cached.isPresent()) return cached;
+    Optional<OrderDetailsDto> dto = orders.findById(id).map(mapper::toDetails);
+    dto.ifPresent(d -> cache.set(key, OrderDetailsCacheFormat.write(d), TIME_TO_LIVE));  // 60 с
+    return dto;
+}
+
+// Composition root — аналог AddEnyimMemcached() + AddSingleton<IMemcachedClient, MemcachedClient>()
+services.addSingleton(MemcachedOptions.class, s -> memcached);
+services.addSingleton(DistributedCache.class, MemcachedDistributedCache.class);
+services.addScoped(OrderService.class, OrderService.class);
+services.addScoped(OrderQueryService.class, OrderQueryService.class);
+services.addScoped(OrderUseCases.class, s -> new CachedOrderUseCases(s.get(OrderService.class), s.get(OrderQueryService.class)));
+```
+
+| Компонент | Шар | Роль |
+|---|---|---|
+| `DistributedCache` | Application (`shared/caching`) | абстракція кешу: `get` / `set(key, value, ttl)` / `remove`; недоступний кеш = промах |
+| `OrderQueryService` | Application (`ordering/caching`) | читання з кешем + fallback до сховища, ключ `order:{id}`, TTL 60 с, `evict` |
+| `CachedOrderUseCases` | Application (`ordering/caching`) | **декоратор** `OrderUseCases`: читання через кеш, інвалідація після змін; `OrderService` про кеш не знає |
+| `OrderDetailsCacheFormat` | Application | серіалізація `OrderDetailsDto` ↔ рядок (роль `JsonSerializer`); версія формату, пошкоджений запис = промах |
+| `MemcachedDistributedCache`, `MemcachedOptions` | Infrastructure (`caching`) | клієнт текстового протоколу Memcached (`get`/`set`/`delete`) на сокетах JDK, таймаут 300 мс, пауза 5 с після збою |
+| `docker-compose.yml` | — | сервер Memcached 1.6: лише `127.0.0.1:11211`, обмеження пам'яті 64 МБ (`-m 64`) |
+
+**Чому власний клієнт, а не бібліотека.** Enyim.Caching — бібліотека .NET; проєкт з ПР1 без сторонніх залежностей
+(власні DI-контейнер у ПР4 і аналог FluentValidation у ПР8), а текстовий протокол Memcached простий: три команди, ≈150 рядків.
+Сервер при цьому справжній — Memcached у Docker, тобто кеш дійсно розподілений: окремий процес, спільний для всіх екземплярів
+застосунку, переживає перезапуск застосунку.
+
+**Чому декоратор.** Методичка радить відокремлювати логіку кешування від бізнес-логіки. `CachedOrderUseCases` реалізує той самий
+інтерфейс `OrderUseCases`, тому ендпоінти й `OrderService` не змінились жодним рядком (OCP), а вимкнути кеш = змінити одну реєстрацію в DI.
+
+### In-memory і distributed
+
+| | In-memory (у пам'яті процесу) | Distributed (Memcached, Redis) |
+|---|---|---|
+| Де дані | у купі JVM застосунку | в окремому сервері |
+| Швидкість | найшвидше (без мережі) | мережевий виклик (на localhost ~0,1–1 мс) |
+| Кілька екземплярів застосунку | у кожного свій кеш, інвалідація не доходить до інших | один спільний кеш, інвалідація видна всім |
+| Перезапуск застосунку | кеш зникає | кеш лишається |
+| Інфраструктура | не потрібна | окремий сервіс, його доступність і безпека |
+
+У нас уже є in-memory дані (`FileDataContext` тримає копію сховища, сповіщення й статистика), а для ПР9 обрано distributed,
+бо саме його вимагає методичка і він готовий до масштабування (кілька екземплярів моноліту за балансувальником, ПР7).
+
+### Узгодженість і компроміси
+
+| Ризик (методичка) | Як враховано |
+|---|---|
+| Застарілі дані | Інвалідація одразу після `saveChanges()`; TTL 60 с обмежує застарілість, якщо інвалідація не дійшла (збій мережі) або якщо паралельне читання записало стару версію між збереженням і видаленням |
+| Неконтрольоване зростання кешу | Кожен запис має TTL (клієнт не приймає «вічних» записів); Memcached обмежено 64 МБ і він витісняє найдавніші записи (LRU); кешуються лише окремі замовлення |
+| Складність інвалідації | Кешується лише результат, що залежить від одного агрегату; причини змін — два методи, обидва в декораторі; `list` свідомо не кешується |
+| Прихована залежність від кешу | Кеш — лише прискорення: при недоступності Memcached `get` = промах, `set`/`remove` пропускаються, усе читається зі сховища; після збою клієнт 5 с не звертається до сервера, щоб запити не чекали таймаут |
+
+Модель узгодженості для читання замовлення — **eventual consistency з обмеженим вікном**: у нормальному режимі після зміни
+наступне читання вже бачить нові дані; у гіршому випадку застарілість не довша за TTL. Для операцій зміни кеш не використовується
+(вони завжди читають агрегат зі сховища з перевіркою версії — ПР5), тож рішення за застарілими даними прийняти неможливо:
+оформити замовлення за «старою» сумою з кешу не вийде.
+
+Вибір TTL: 60 с (як у методичці). Більший TTL майже не дає виграшу (кошик інвалідується при кожній зміні), а збільшує вікно застарілості
+у разі збою інвалідації; менший — частіше читання зі сховища, коли користувач просто переглядає кошик.
+
+**Коли кеш недоцільний:** дані, які змінюються частіше, ніж читаються (`GET /orders`); критичні транзакційні рішення
+(оформлення, перевірка версії); дешеві операції (дані й так у пам'яті); персональні дані без потреби (у кеш не кладемо `customerId`).
+
+### Перевірки ПР9 (`Checks.caching`)
+
+Тестовий сервер з протоколом Memcached (`FakeMemcachedServer`, лише loopback) бачить кожну команду клієнта: запис і читання
+UTF-8 з TTL, видалення, промах; відмова від ключів з пробілами/керувальними символами і записів без TTL; DI (клієнт Singleton,
+`OrderQueryService` і сценарії Scoped, `OrderUseCases` — декоратор); створення не пише в кеш; промах → читання зі сховища і запис
+`order:{id}` з TTL 60; влучання → сховище не читається; у кеші немає `customerId`; відсутнє замовлення не кешується; пошкоджений запис = промах;
+`addItem`/`place` видаляють запис, наступне читання бачить нову суму і статус; відхилена зміна кеш не чіпає; недоступний Memcached —
+усе працює через сховище і без очікування таймауту на кожен запит; `OrderService` не знає про кеш; Application не імпортує мережу
+і Memcached. Якщо справжній Memcached запущено (`docker compose up -d memcached`), додатково — обмін `set/get/delete` з ним
+(інакше виводиться `SKIP`, і перевірок 179).
+
 ## Запуск
 
 Потрібен **JDK 21** або новіший і **Maven 3.9+** (у IntelliJ IDEA Maven вбудований).
 Сторонніх бібліотек немає; під час першої збірки Maven один раз завантажує зі свого репозиторію лише плагіни збірки, тож потрібен інтернет.
+
+ПР9: для кешу потрібен сервер **Memcached**. Найпростіше — Docker Desktop:
+
+```powershell
+docker compose up -d memcached      # Memcached 1.6 на 127.0.0.1:11211 (64 МБ)
+docker compose stop memcached       # зупинити (застосунок продовжить працювати без кешу)
+```
+
+Адресу можна змінити третім аргументом (`java -jar ... 8080 data 127.0.0.1:11211`) або змінною середовища `INTERNETSHOP_MEMCACHED`.
+Без Memcached застосунок і перевірки працюють: кеш лише прискорює читання.
 
 ### IntelliJ IDEA
 
@@ -703,12 +839,12 @@ new Router(...).useModelValidation(s.get(AutoValidation.class))
 3. Вибрати конфігурацію запуску **InternetShop (localhost:8080)** (зберігається в `.run/`) і натиснути **Run**.
 4. Відкрити <http://localhost:8080>.
 5. Перевірки: вікно **Maven → InternetShop → Lifecycle → verify** (повна збірка + перевірки)
-   або конфігурація **Checks**. Очікуваний результат: `All 136 checks passed.`
+   або конфігурація **Checks**. Очікуваний результат: `All 180 checks passed.`
 
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 158 перевірок
+mvn verify                                         # збірка всіх модулів + 180 перевірок
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -726,7 +862,8 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
 `demo.ps1` створює замовлення й по кроках показує: відмову оформити порожнє замовлення, додавання товару з даними з Catalog,
 перевищення кількості 99, неіснуючий товар і кількість 0 (валідація, 400 з обома помилками), оформлення, заборону змінювати
 оформлене замовлення, видалення товару з каталогу (204, потім 404), а також (ПР8) структуровану відповідь 400 для некоректного
-товару і відмову створити товар з назвою, що вже є в каталозі.
+товару і відмову створити товар з назвою, що вже є в каталозі; (ПР9) лічильники `get_hits`/`get_misses` Memcached для першого
+і другого читання замовлення, вміст запису `order:{id}` у кеші та його зникнення після зміни замовлення.
 
 ### Перевірки
 
@@ -764,6 +901,8 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
 - **Валідація (ПР8):** правила `CreateOrderRequestValidator`, `AddOrderItemRequestValidator`, `CreateProductRequestValidator`
   (синтаксичні та семантичні з доступом до даних), збирання всіх помилок, реєстрація в DI (Scoped) і автоматичний запуск,
   відсутність перевірок в ендпоінтах; через HTTP — структурована відповідь 400 без значень клієнта, нічого не зберігається.
+- **Кешування (ПР9):** клієнт Memcached (протокол, TTL, захист ключів), cache-aside (промах → сховище → кеш, влучання без сховища),
+  інвалідація після `addItem`/`place`, відсутність застарілих даних, робота без Memcached, межі шарів (див. [розділ ПР9](#перевірки-пр9-checkscaching)).
 - **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
@@ -780,6 +919,7 @@ InternetShop/
 │   └── src/main/java/com/internetshop/application/
 │       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3), UnitOfWork (ПР5)
 │       │   ├── events/    Event, EventBus, EventHandler                 (ПР2)
+│       │   ├── caching/   DistributedCache                              (ПР9)
 │       │   └── validation/ Validator, AbstractValidator, RuleBuilder, ValidationResult, ValidationFailure, ValidationException (ПР8)
 │       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductRepository (ПР5), ...
 │       │   ├── dto/       ProductDto, CreateProductRequest, CreatedProductDto   (ПР6)
@@ -787,6 +927,7 @@ InternetShop/
 │       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderRepository (ПР5), ProductCatalog, CatalogProduct, ...
 │       │   ├── dto/       CreateOrderRequest, AddOrderItemRequest, CreatedOrderDto, OrderDetailsDto, OrderLineDto, PlacedOrderDto (ПР6)
 │       │   ├── events/    OrderCreated, OrderPlaced                     (ПР2)
+│       │   ├── caching/   OrderQueryService, CachedOrderUseCases, OrderDetailsCacheFormat (ПР9)
 │       │   └── validation/ CreateOrderRequestValidator, AddOrderItemRequestValidator (ПР8)
 │       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
 │       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2), SalesReport (ПР4)
@@ -795,6 +936,7 @@ InternetShop/
 │       ├── persistence/   FileDataContext, FileUnitOfWork, FileProductRepository, FileOrderRepository (ПР5), TextDataFile
 │       ├── integration/   CatalogProductAdapter
 │       ├── events/        InProcessEventBus                            (ПР2)
+│       ├── caching/       MemcachedDistributedCache, MemcachedOptions  (ПР9)
 │       ├── notifications/ InMemoryNotificationOutbox                   (ПР2)
 │       └── time/          SystemTimeProvider                           (ПР3)
 ├── internetshop-webapi/            pom.xml (-> application, infrastructure, domain; збирає internetshop.jar)
@@ -803,8 +945,9 @@ InternetShop/
 │   │   └── validation/                          ValidationServices, AutoValidation, ValidationProblemDetails (ПР8)
 │   └── src/main/resources/static/               index.html, app.js, styles.css
 ├── internetshop-checks/            pom.xml (-> усі модулі; запуск на mvn verify)
-│   └── src/main/java/com/internetshop/checks/Checks.java
+│   └── src/main/java/com/internetshop/checks/Checks.java, FakeMemcachedServer.java (ПР9)
 ├── .run/                           конфігурації запуску IntelliJ (InternetShop, Checks)
+├── docker-compose.yml              сервер Memcached для кешу (ПР9)
 └── run.ps1, check.ps1, demo.ps1
 ```
 
@@ -846,6 +989,11 @@ InternetShop/
 | ПР8: пакет FluentValidation, `AbstractValidator<CreateOrderCommand>` | Власний аналог у `application/shared/validation`; `CreateOrderRequestValidator extends AbstractValidator<CreateOrderRequest>` |
 | ПР8: `AddValidatorsFromAssemblyContaining`, `AddFluentValidationAutoValidation` | `ValidationServices.addValidators(...)`, `AutoValidation` у конвеєрі `Router` |
 | ПР8: `ValidationProblemDetails` | `ValidationProblemDetails` через правило `ErrorMapper` |
+| ПР9: пакет Enyim.Caching, `IMemcachedClient` | Абстракція `DistributedCache` (Application) + власний клієнт протоколу `MemcachedDistributedCache` (Infrastructure) |
+| ПР9: `builder.Services.AddEnyimMemcached()` + `AddSingleton<IMemcachedClient, MemcachedClient>()` | `addSingleton(DistributedCache.class, MemcachedDistributedCache.class)` + `MemcachedOptions` |
+| ПР9: `OrderQueryService.GetByIdAsync` (`$"order:{id}"`, TTL 60) | `OrderQueryService.getById` (`"order:" + id`, `TIME_TO_LIVE` = 60 с) |
+| ПР9: `JsonSerializer.Serialize/Deserialize<OrderDto>` | `OrderDetailsCacheFormat.write/read` (`OrderDetailsDto` ↔ рядок) |
+| ПР9: `_cache.RemoveAsync($"order:{id}")` після `SaveChangesAsync` | `CachedOrderUseCases`: `queries.evict(id)` після успішного `addItem`/`place` |
 
 ## Результат
 
@@ -853,5 +1001,6 @@ InternetShop/
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
 роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3), переходу на DI-контейнер (ПР4), на Repository + Unit of Work (ПР5) і на DTO для кожної операції (ПР6) поведінка не змінилася. У ПР7 стиль застосунку проаналізовано як модульний моноліт,
 а висновки закріплено фітнес-функціями. У ПР8 додано декларативну валідацію вхідних DTO, яка автоматично виконується
-до use-case і повертає структуровані помилки. Усі 158 перевірок проходять.
+до use-case і повертає структуровані помилки. У ПР9 читання замовлення кешується в Memcached (cache-aside, TTL 60 с,
+інвалідація після змін) через декоратор, без змін у бізнес-логіці; без Memcached застосунок працює як раніше. Усі 180 перевірок проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.

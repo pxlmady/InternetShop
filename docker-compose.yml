@@ -1,0 +1,12 @@
+# ПР9: сервер розподіленого кешу Memcached для InternetShop.
+# Запуск: docker compose up -d memcached   (зупинка: docker compose stop memcached)
+# Порт відкрито лише на 127.0.0.1: Memcached не має автентифікації, тож з інших комп'ютерів він недоступний.
+# -m 64: кеш обмежено 64 МБ — при заповненні Memcached сам витісняє найдавніші записи (LRU), обсяг не росте безмежно.
+services:
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: internetshop-memcached
+    command: ["memcached", "-m", "64", "-I", "1m"]
+    ports:
+      - "127.0.0.1:11211:11211"
+    restart: unless-stopped

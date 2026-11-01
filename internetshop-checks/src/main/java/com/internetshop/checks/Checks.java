@@ -26,6 +26,8 @@ import com.internetshop.application.ordering.OrderService;
 import com.internetshop.application.ordering.OrderRepository;
 import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductNotInCatalogException;
+import com.internetshop.application.ordering.caching.CachedOrderUseCases;
+import com.internetshop.application.ordering.caching.OrderQueryService;
 import com.internetshop.application.ordering.dto.AddOrderItemRequest;
 import com.internetshop.application.ordering.dto.CreateOrderRequest;
 import com.internetshop.application.ordering.dto.CreatedOrderDto;
@@ -39,6 +41,7 @@ import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.application.shared.UnitOfWork;
+import com.internetshop.application.shared.caching.DistributedCache;
 import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.application.shared.validation.AbstractValidator;
 import com.internetshop.application.shared.validation.ValidationException;
@@ -55,6 +58,8 @@ import com.internetshop.domain.ordering.OrderStatus;
 import com.internetshop.domain.ordering.Quantity;
 import com.internetshop.domain.shared.DomainRuleException;
 import com.internetshop.domain.shared.Money;
+import com.internetshop.infrastructure.caching.MemcachedDistributedCache;
+import com.internetshop.infrastructure.caching.MemcachedOptions;
 import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
 import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
@@ -93,6 +98,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -111,7 +117,7 @@ import java.util.stream.Stream;
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
  * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> Repository і Unit of Work (ПР5) ->
- * DTO і мапінг (ПР6) -> валідація вхідних даних (ПР8) -> межі шарів і контекстів -> архітектурний стиль
+ * DTO і мапінг (ПР6) -> валідація вхідних даних (ПР8) -> кешування з Memcached (ПР9) -> межі шарів і контекстів -> архітектурний стиль
  * «модульний моноліт» (ПР7) -> HTTP.
  * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
@@ -151,6 +157,7 @@ public final class Checks {
             repositoryAndUnitOfWork(tmp.resolve("uow"));
             dataTransferObjects(tmp.resolve("dto"));
             validation(tmp.resolve("validation"));
+            caching(tmp.resolve("caching"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             architecturalStyle(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
@@ -820,6 +827,140 @@ public final class Checks {
     }
 
     /** Читання «після перезапуску»: новий контекст даних над тими самими файлами. */
+    // ---------------- ПР9: кешування (Memcached, cache-aside, TTL, інвалідація) ----------------
+
+    /** Репозиторій-обгортка, що рахує звернення до сховища: так видно, чи відповідь прийшла з кешу. */
+    private static OrderRepository countingReads(OrderRepository inner, AtomicInteger reads) {
+        return new OrderRepository() {
+            public List<Order> findAll() { return inner.findAll(); }
+            public Optional<Order> findById(UUID id) { reads.incrementAndGet(); return inner.findById(id); }
+            public void add(Order order) { inner.add(order); }
+            public void update(Order order) { inner.update(order); }
+        };
+    }
+
+    private static void caching(Path dir) throws Exception {
+        try (FakeMemcachedServer memcached = new FakeMemcachedServer()) {
+            MemcachedOptions options = MemcachedOptions.parse(memcached.address());
+            DistributedCache cache = new MemcachedDistributedCache(options);
+
+            // Клієнт Memcached: текстовий протокол get/set/delete, UTF-8, TTL у секундах.
+            cache.set("check:1", "Привіт, кеш", Duration.ofSeconds(5));
+            check(cache.get("check:1").orElse("").equals("Привіт, кеш") && memcached.commands.contains("set check:1 5"),
+                    "Memcached client stores and reads a value with TTL over the text protocol");
+            cache.remove("check:1");
+            check(cache.get("check:1").isEmpty() && cache.get("check:missing").isEmpty(),
+                    "Memcached client: removed and missing keys are cache misses");
+            expect(IllegalArgumentException.class, () -> cache.set("bad key\r\nflush_all", "x", Duration.ofSeconds(5)),
+                    "Memcached client rejects keys with spaces/control characters (no command injection)");
+            expect(IllegalArgumentException.class, () -> cache.set("check:2", "x", Duration.ZERO),
+                    "Memcached client refuses entries without a limited TTL");
+
+            // Cache-aside через DI: ті самі реєстрації, що й у застосунку, але з тестовим сервером Memcached.
+            ServiceProvider services = InternetShopApp.configureServices(dir, options);
+            check(services.lifetimeOf(DistributedCache.class) == Lifetime.SINGLETON
+                            && services.lifetimeOf(OrderQueryService.class) == Lifetime.SCOPED
+                            && services.lifetimeOf(OrderUseCases.class) == Lifetime.SCOPED,
+                    "DI: distributed cache client Singleton, OrderQueryService and use cases Scoped");
+            UUID productId, orderId, customerId = UUID.randomUUID();
+            try (ServiceScope scope = services.createScope()) {
+                check(scope.get(OrderUseCases.class) instanceof CachedOrderUseCases,
+                        "OrderUseCases is the caching decorator over OrderService");
+                productId = scope.get(CatalogUseCases.class).create(new CreateProductRequest("Миша", "", new BigDecimal("100.50"))).id();
+                orderId = scope.get(OrderUseCases.class).create(new CreateOrderRequest(customerId)).id();
+                check(memcached.peek(OrderQueryService.cacheKey(orderId)).isEmpty(), "Creating an order does not write to the cache");
+                scope.get(OrderUseCases.class).addItem(orderId, new AddOrderItemRequest(productId, 2));
+            }
+
+            FileDataContext db = services.get(FileDataContext.class);
+            AtomicInteger reads = new AtomicInteger();
+            FileUnitOfWork uow = new FileUnitOfWork(db);
+            OrderQueryService queries = new OrderQueryService(cache, countingReads(new FileOrderRepository(db, uow), reads), ORDER_MAPPER);
+            String key = OrderQueryService.cacheKey(orderId);
+
+            OrderDetailsDto first = queries.getById(orderId).orElseThrow();
+            check(reads.get() == 1 && memcached.peek(key).isPresent() && memcached.commands.contains("set " + key + " 60"),
+                    "Cache miss: order read from the repository and cached under order:{id} with TTL 60 s");
+            OrderDetailsDto second = queries.getById(orderId).orElseThrow();
+            check(reads.get() == 1 && second.equals(first) && second.lines().get(0).productName().equals("Миша"),
+                    "Cache hit: same DTO returned without touching the repository");
+            check(!memcached.peek(key).orElseThrow().contains(customerId.toString()),
+                    "Cached value holds the order DTO only (no customer id)");
+            check(queries.getById(UUID.randomUUID()).isEmpty() && memcached.count("set ") == 2,
+                    "Missing order is not cached (no negative caching)");
+
+            memcached.put(key, "пошкоджений запис");
+            check(queries.getById(orderId).orElseThrow().equals(first) && reads.get() == 3,
+                    "Corrupted cache entry is treated as a miss and re-read from the repository");
+
+            // Інвалідація: зміна через сценарій → запис видаляється → наступне читання бачить нові дані.
+            try (ServiceScope scope = services.createScope()) {
+                OrderUseCases orders = scope.get(OrderUseCases.class);
+                check(orders.get(orderId).total().compareTo(new BigDecimal("201.00")) == 0, "GET through use cases served from cache");
+                long getsBefore = memcached.count("get ");
+                orders.addItem(orderId, new AddOrderItemRequest(productId, 1));
+                check(memcached.peek(key).isEmpty() && memcached.commands.contains("delete " + key),
+                        "Invalidation: addItem removes order:{id} from the cache after saving");
+                check(orders.get(orderId).total().compareTo(new BigDecimal("301.50")) == 0 && memcached.count("get ") > getsBefore,
+                        "After invalidation the next read returns fresh data (no stale total)");
+                long deletesBefore = memcached.count("delete ");
+                try { orders.addItem(orderId, new AddOrderItemRequest(productId, 99)); } catch (DomainRuleException expected) { }
+                check(memcached.count("delete ") == deletesBefore && memcached.peek(key).isPresent(),
+                        "Rejected change does not invalidate the cache");
+                orders.place(orderId);
+                check(memcached.peek(key).isEmpty() && orders.get(orderId).status().equals("PLACED"),
+                        "Invalidation: place removes the entry; status read after it is PLACED");
+            }
+        }
+
+        // Кеш недоступний: застосунок працює далі, читання й зміни йдуть у сховище.
+        int closedPort;
+        try (java.net.ServerSocket s = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())) { closedPort = s.getLocalPort(); }
+        Logger cacheLog = Logger.getLogger(MemcachedDistributedCache.class.getName());
+        Level previous = cacheLog.getLevel();
+        cacheLog.setLevel(Level.OFF); // очікуване попередження не засмічує вивід перевірок
+        try {
+            ServiceProvider offline = InternetShopApp.configureServices(dir.resolve("offline"),
+                    MemcachedOptions.parse("127.0.0.1:" + closedPort));
+            try (ServiceScope scope = offline.createScope()) {
+                OrderUseCases orders = scope.get(OrderUseCases.class);
+                UUID productId = scope.get(CatalogUseCases.class).create(new CreateProductRequest("Кабель", "", new BigDecimal("10"))).id();
+                UUID orderId = orders.create(new CreateOrderRequest(UUID.randomUUID())).id();
+                orders.addItem(orderId, new AddOrderItemRequest(productId, 3));
+                check(orders.get(orderId).total().compareTo(new BigDecimal("30")) == 0,
+                        "Cache unavailable: reads fall back to the repository, changes still work");
+                long start = System.nanoTime();
+                for (int i = 0; i < 20; i++) orders.get(orderId);
+                check(Duration.ofNanos(System.nanoTime() - start).toMillis() < 2000,
+                        "Cache unavailable: client backs off instead of waiting for a timeout on every request");
+            }
+        } finally {
+            cacheLog.setLevel(previous);
+        }
+
+        // Межі: логіка кешування відокремлена від бізнес-логіки.
+        check(Arrays.stream(OrderService.class.getDeclaredFields()).noneMatch(f -> f.getType() == DistributedCache.class
+                        || f.getType() == OrderQueryService.class),
+                "OrderService (business logic) knows nothing about caching");
+
+        // Необов'язково: якщо справжній Memcached запущено (docker compose up -d memcached) — перевірка з ним.
+        DistributedCache real = new MemcachedDistributedCache(MemcachedOptions.parse(MemcachedOptions.DEFAULT_SERVER));
+        Level before = cacheLog.getLevel();
+        cacheLog.setLevel(Level.OFF);
+        String probeKey = "internetshop-checks:" + UUID.randomUUID();
+        try {
+            real.set(probeKey, "ok", Duration.ofSeconds(5));
+            if (real.get(probeKey).isPresent()) {
+                real.remove(probeKey);
+                check(real.get(probeKey).isEmpty(), "Real Memcached at " + MemcachedOptions.DEFAULT_SERVER + ": set/get/delete round trip");
+            } else {
+                System.out.println("SKIP: real Memcached at " + MemcachedOptions.DEFAULT_SERVER + " is not running");
+            }
+        } finally {
+            cacheLog.setLevel(before);
+        }
+    }
+
     private static ProductRepository productsAfterRestart(Path dir) {
         FileDataContext db = new FileDataContext(dir);
         return new FileProductRepository(db, new FileUnitOfWork(db));
@@ -907,6 +1048,12 @@ public final class Checks {
         check(importsOf(webapi.resolve("endpoints")).stream().noneMatch(i -> i.contains(".validation."))
                         && sourcesOf(webapi.resolve("endpoints")).stream().noneMatch(src -> src.contains("throw new")),
                 "Validation: endpoints contain no validation logic (validators run automatically before them)");
+
+        // ПР9: Application бачить лише абстракцію DistributedCache; мережа і протокол Memcached — тільки в Infrastructure.
+        check(importsOf(application).stream().noneMatch(i -> i.startsWith("java.net") || i.contains("Memcached"))
+                        && sourcesOf(infrastructure.resolve("com/internetshop/infrastructure/caching")).stream()
+                        .anyMatch(src -> src.contains("implements DistributedCache")),
+                "Caching: Application depends on the DistributedCache abstraction; Memcached lives in Infrastructure");
     }
 
     // ---------------- ПР7: архітектурний стиль — модульний моноліт ----------------

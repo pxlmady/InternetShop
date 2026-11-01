@@ -76,3 +76,44 @@ try {
 Next-Step
 Write-Host '13. ПР8: товар з назвою, що вже є в каталозі (семантична перевірка з доступом до даних): HTTP 400'
 Send-Demo '/products' @{ name = $product.name; description = ''; price = 1 }
+Next-Step
+# ПР9: прямий запит до Memcached (текстовий протокол) — лише щоб показати, що лежить у кеші.
+function Invoke-Memcached([string]$Command, [string]$Server = '127.0.0.1', [int]$Port = 11211) {
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new($Server, $Port)
+        try {
+            $stream = $client.GetStream()
+            $bytes = [Text.Encoding]::ASCII.GetBytes("$Command`r`n")
+            $stream.Write($bytes, 0, $bytes.Length)
+            $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8)
+            $lines = @()
+            while ($true) {
+                $line = $reader.ReadLine()
+                $lines += $line
+                if ($line -in 'END', 'DELETED', 'NOT_FOUND', 'ERROR' -or $null -eq $line) { break }
+            }
+            return $lines
+        } finally { $client.Dispose() }
+    } catch { return @('Memcached недоступний: застосунок працює без кешу (fallback до сховища)') }
+}
+function Show-CacheStats {
+    $s = Invoke-Memcached 'stats' | Where-Object { $_ -match '^STAT (get_hits|get_misses|curr_items) ' }
+    Write-Host ("   Memcached: " + (($s | ForEach-Object { $_ -replace '^STAT ', '' }) -join ', '))
+}
+Write-Host '14. ПР9: нове замовлення з товаром; перше читання — промах кешу (дані зі сховища), друге — влучання'
+$cached = Invoke-RestMethod -Uri "$BaseUrl/orders" -Method Post -ContentType 'application/json' `
+    -Body (@{ customerId = [guid]::NewGuid().ToString() } | ConvertTo-Json)
+Send-Demo "/orders/$($cached.id)/items" @{ productId = $product.id; quantity = 1 } | Out-Null
+Show-CacheStats
+Invoke-RestMethod "$BaseUrl/orders/$($cached.id)" | Out-Null
+Write-Host '   після 1-го GET:'; Show-CacheStats
+Invoke-RestMethod "$BaseUrl/orders/$($cached.id)" | Out-Null
+Write-Host '   після 2-го GET:'; Show-CacheStats
+Write-Host "   Запис у кеші за ключем order:$($cached.id) (TTL 60 с, без customerId):"
+Invoke-Memcached "get order:$($cached.id)" | ForEach-Object { "   $_" }
+Next-Step
+Write-Host '15. ПР9: додаємо ще товар — після збереження запис у кеші інвалідовано, наступний GET бачить нову суму'
+Send-Demo "/orders/$($cached.id)/items" @{ productId = $product.id; quantity = 1 } | Out-Null
+Write-Host "   get order:$($cached.id) одразу після зміни:"
+Invoke-Memcached "get order:$($cached.id)" | ForEach-Object { "   $_" }
+Invoke-RestMethod "$BaseUrl/orders/$($cached.id)" | Select-Object id, status, total | Format-List

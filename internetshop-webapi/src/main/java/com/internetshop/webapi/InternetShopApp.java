@@ -21,6 +21,8 @@ import com.internetshop.application.ordering.OrderService;
 import com.internetshop.application.ordering.OrderRepository;
 import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductCatalog;
+import com.internetshop.application.ordering.caching.CachedOrderUseCases;
+import com.internetshop.application.ordering.caching.OrderQueryService;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
 import com.internetshop.application.ordering.validation.AddOrderItemRequestValidator;
@@ -29,9 +31,12 @@ import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.application.shared.UnitOfWork;
+import com.internetshop.application.shared.caching.DistributedCache;
 import com.internetshop.application.shared.events.EventBus;
 import com.internetshop.application.shared.validation.ValidationException;
 import com.internetshop.domain.shared.DomainRuleException;
+import com.internetshop.infrastructure.caching.MemcachedDistributedCache;
+import com.internetshop.infrastructure.caching.MemcachedOptions;
 import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
 import com.internetshop.infrastructure.notifications.InMemoryNotificationOutbox;
@@ -79,13 +84,21 @@ import java.util.concurrent.Executors;
  * <p>
  * ПР8 (валідація): тут реєструються валідатори DTO і вмикається їхній автоматичний запуск у Router,
  * а ErrorMapper отримує правило ValidationException → 400 зі структурованою відповіддю.
+ * <p>
+ * ПР9 (кешування): тут підключається розподілений кеш Memcached (як AddEnyimMemcached() у методичці),
+ * а OrderUseCases загортається в декоратор CachedOrderUseCases. OrderService і ендпоінти при цьому не змінились.
  */
 public final class InternetShopApp {
 
     private InternetShopApp() { }
 
-    /** Реєстрація залежностей і їхніх життєвих циклів. */
+    /** Реєстрація залежностей з Memcached за адресою за замовчуванням (127.0.0.1:11211). */
     public static ServiceProvider configureServices(Path dataDirectory) {
+        return configureServices(dataDirectory, MemcachedOptions.parse(MemcachedOptions.DEFAULT_SERVER));
+    }
+
+    /** Реєстрація залежностей і їхніх життєвих циклів. */
+    public static ServiceProvider configureServices(Path dataDirectory, MemcachedOptions memcached) {
         ServiceCollection services = new ServiceCollection();
 
         // ---- Singleton: один екземпляр на весь застосунок ----
@@ -107,6 +120,10 @@ public final class InternetShopApp {
         services.addSingleton(OrderCreatedStatisticsHandler.class, OrderCreatedStatisticsHandler.class);
         services.addSingleton(OrderPlacedStatisticsHandler.class, OrderPlacedStatisticsHandler.class);
         services.addSingleton(OrderPlacedNotificationHandler.class, OrderPlacedNotificationHandler.class);
+        // ПР9: клієнт розподіленого кешу — як AddSingleton<IMemcachedClient, MemcachedClient>() у методичці.
+        // Самі дані кешу живуть в окремому процесі Memcached; клієнт їх не тримає, тому один на весь застосунок.
+        services.addSingleton(MemcachedOptions.class, s -> memcached);
+        services.addSingleton(DistributedCache.class, MemcachedDistributedCache.class);
 
         // ---- Scoped: один екземпляр на HTTP-запит ----
         // ПР5: Unit of Work і репозиторії — Scoped, як у методичці: в межах одного запиту всі репозиторії
@@ -121,7 +138,12 @@ public final class InternetShopApp {
         services.addScoped(CatalogUseCases.class, CatalogService.class);
         services.addScoped(ProductQueries.class, s -> s.get(CatalogUseCases.class));
         services.addScoped(ProductCatalog.class, CatalogProductAdapter.class); // Ordering → Catalog (лише читання)
-        services.addScoped(OrderUseCases.class, OrderService.class);           // producer подій
+        // ПР9: OrderService (бізнес-сценарії, producer подій) реєструється як є, а як OrderUseCases назовні видно
+        // декоратор CachedOrderUseCases: читання через кеш, після змін — інвалідація. Ендпоінти цього не помічають.
+        services.addScoped(OrderService.class, OrderService.class);
+        services.addScoped(OrderQueryService.class, OrderQueryService.class);
+        services.addScoped(OrderUseCases.class,
+                s -> new CachedOrderUseCases(s.get(OrderService.class), s.get(OrderQueryService.class)));
         services.addScoped(ProductEndpoints.class, ProductEndpoints.class);
         services.addScoped(OrderEndpoints.class, OrderEndpoints.class);
         services.addScoped(NotificationEndpoints.class, NotificationEndpoints.class);
@@ -167,7 +189,11 @@ public final class InternetShopApp {
     }
 
     public static HttpServer start(int port, Path dataDirectory) throws IOException {
-        ServiceProvider services = configureServices(dataDirectory);
+        return start(port, dataDirectory, MemcachedOptions.parse(MemcachedOptions.DEFAULT_SERVER));
+    }
+
+    public static HttpServer start(int port, Path dataDirectory, MemcachedOptions memcached) throws IOException {
+        ServiceProvider services = configureServices(dataDirectory, memcached);
 
         // Event-Driven: хто на яку подію реагує, вирішується лише тут. OrderService про це не знає;
         // нова реакція = новий обробник + реєстрація + один рядок підписки, без змін у сценаріях замовлень.

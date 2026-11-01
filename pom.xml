@@ -14,7 +14,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>InternetShop</name>
-    <description>Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository + Unit of Work, DTO, Validation: інтернет-магазин (практичні роботи №1–8)</description>
+    <description>Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository + Unit of Work, DTO, Validation, Caching: інтернет-магазин (практичні роботи №1–9)</description>
 
     <modules>
         <module>internetshop-domain</module>
