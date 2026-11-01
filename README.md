@@ -1,4 +1,4 @@
-# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work, DTO, архітектурні стилі
+# InternetShop: Clean Architecture, DDD, Event-Driven Design, SOLID, Dependency Injection, Repository та Unit of Work, DTO, архітектурні стилі, валідація
 
 Практичні роботи з дисципліни «Архітектура програмного забезпечення»:
 - №1 — **Чиста архітектура та Domain-Driven Design**;
@@ -7,7 +7,8 @@
 - №4 — **Dependency Injection та інверсія керування** (DI-контейнер і життєві цикли, див. [розділ ПР4](#практична-робота-4-dependency-injection-та-інверсія-керування));
 - №5 — **Repository та Unit of Work** (див. [розділ ПР5](#практична-робота-5-repository-та-unit-of-work));
 - №6 — **Об'єкти передавання даних (DTO) та мапінг між шарами** (див. [розділ ПР6](#практична-робота-6-обєкти-передавання-даних-dto-та-мапінг-між-шарами));
-- №7 — **Архітектурні стилі та компроміси в розподілених системах** (аналіз стилю, порівняння з мікросервісами, див. [розділ ПР7](#практична-робота-7-архітектурні-стилі-та-компроміси-в-розподілених-системах)).
+- №7 — **Архітектурні стилі та компроміси в розподілених системах** (аналіз стилю, порівняння з мікросервісами, див. [розділ ПР7](#практична-робота-7-архітектурні-стилі-та-компроміси-в-розподілених-системах));
+- №8 — **Валідація даних у прикладному рівні (FluentValidation)** (валідатори DTO, автоматична перевірка до use-case, див. [розділ ПР8](#практична-робота-8-валідація-даних-у-прикладному-рівні-fluentvalidation)).
 
 Вебзастосунок інтернет-магазину на **чистій Java 21** (без фреймворків і сторонніх бібліотек), багатомодульний проєкт **Maven** для IntelliJ IDEA.
 Застосунок поділено на шари Domain / Application / Infrastructure / WebApi і два bounded context: **Catalog** і **Ordering**.
@@ -29,7 +30,7 @@
 | Один або декілька bounded context і їх взаємодія | Catalog і Ordering; Ordering звертається до Catalog лише через контракт `ProductCatalog` |
 | Domain без залежностей від фреймворків | `internetshop-domain/pom.xml` не має жодних залежностей — лише JDK; додатково перевіряє `Checks` |
 | Взаємодія шарів через абстракції | Репозиторії, Unit of Work і контракт між контекстами описані інтерфейсами в Application (`ProductRepository`, `OrderRepository`, `UnitOfWork`, `ProductCatalog`) |
-| Немає бізнес-логіки в контролерах і сховищах | Ендпоінти лише викликають сервіси Application; правила — тільки в Domain |
+| Немає бізнес-логіки в контролерах і сховищах | Ендпоінти лише викликають сервіси Application; правила — у Domain (з ПР8 перевірки вхідних даних — у валідаторах Application) |
 
 ## Предметна область і bounded contexts
 
@@ -209,6 +210,7 @@ return mapper.toDto(order);                                    // 6. DTO для 
 
 | Ситуація | Статус | Звідки |
 |---|---|---|
+| Вхідні дані не пройшли валідацію (ПР8) | 400 | `ValidationException` → `ValidationProblemDetails` (помилки за полями) |
 | Порушено бізнес-правило | 400 | `DomainRuleException` |
 | Некоректний JSON, Id або тип поля | 400 | `BadRequestException` (WebApi) |
 | Товар / замовлення не знайдено | 404 | `NotFoundException` (Application) |
@@ -218,7 +220,9 @@ return mapper.toDto(order);                                    // 6. DTO для 
 | POST без JSON | 415 | `Router` |
 | Непередбачена помилка | 500 | загальне повідомлення; подробиці лише в лозі сервера |
 
-Відповідь з помилкою має вигляд `{"error":"текст"}`.
+Відповідь з помилкою має вигляд `{"error":"текст"}`. Помилка валідації (ПР8) додатково містить `title`, `status`
+і `errors` — повідомлення, згруповані за полями запиту: `{"title":"Вхідні дані не пройшли перевірку.","status":400,
+"error":"Назва товару обов'язкова.","errors":{"name":["Назва товару обов'язкова."]}}`.
 
 ## Безпека даних
 
@@ -230,6 +234,8 @@ return mapper.toDto(order);                                    // 6. DTO для 
 - ПР6: назовні передаються лише DTO з потрібними полями. Ідентифікатори покупців і внутрішня версія агрегату у відповідях
   не з'являються (раніше `GET /orders` і `GET /notifications` показували `customerId` усіх покупців). Серіалізатор JSON
   відмовляється записувати доменні об'єкти й невідомі типи, тож випадково «віддати» сутність через `toString()` неможливо.
+- ПР8: некоректні вхідні дані відхиляються до виконання сценарію, тож нічого не зберігається. У відповіді з помилками
+  валідації лише назви полів і тексти правил — значення, які надіслав клієнт, назад не повертаються.
 - Робочі дані (`data/`) і результати збірки (`target/`) виключені з Git.
 
 ## Практична робота №2: Event-Driven Design
@@ -578,6 +584,113 @@ check(orderService.contains("events.publish(") && savedFirst,
 Вони перевіряють саме ті твердження, на яких стоїть аналіз: одна одиниця розгортання, модулі без циклів і залежностей «назовні»,
 єдина точка дотику контекстів (місце майбутнього розділення) і порядок «спочатку зберегти, потім опублікувати подію».
 
+## Практична робота №8: Валідація даних у прикладному рівні (FluentValidation)
+
+Мета: перевіряти вхідні дані **декларативними правилами** на рівні вхідних моделей (команд) Application, автоматично
+до виконання use-case, і повертати клієнту **структуровану** відповідь з помилками.
+
+| Завдання методички | Де виконано |
+|---|---|
+| 1. Додати FluentValidation до проєкту та інтегрувати в WebApi | Java-аналог FluentValidation у `application/shared/validation` (`Validator<T>`, `AbstractValidator<T>`, `RuleBuilder`, `ValidationResult`, `ValidationFailure`, `ValidationException`); реєстрація в DI — `ValidationServices.addValidators(...)` в `InternetShopApp` |
+| 2. Валідатор для `CreateOrderCommand` | `CreateOrderRequestValidator` (наш `CreateOrderRequest` з ПР6 — це і є команда створення замовлення) |
+| 3. Автоматична перевірка команд перед use-case | `Router.route(..., binder, action)`: JSON → DTO → `AutoValidation` → ендпоінт → use-case |
+| 4. Структурована відповідь з помилками | `ValidationProblemDetails` (аналог ASP.NET `ValidationProblemDetails`), правило `ValidationException → 400` в `ErrorMapper` |
+| 5. Щонайменше одна семантична перевірка | Унікальна назва товару (`CreateProductRequestValidator`, через `ProductRepository`) і існування товару в каталозі (`AddOrderItemRequestValidator`, через `ProductCatalog`) |
+| Закріплення | 22 нові перевірки в `Checks.validation` і HTTP; `mvn verify`: 158 перевірок |
+
+### Чому власний аналог, а не бібліотека
+
+FluentValidation — бібліотека .NET; у Java «офіційного» відповідника немає. Проєкт з ПР1 свідомо без сторонніх бібліотек
+(і DI-контейнер у ПР4 теж власний), тому мінімальний аналог з тим самим API написано в Application (≈150 рядків).
+Порівняння:
+
+| FluentValidation (C#) | InternetShop (Java) |
+|---|---|
+| `IValidator<T>`, `AbstractValidator<T>` | `Validator<T>`, `AbstractValidator<T>` |
+| `RuleFor(x => x.Customer)` | `ruleFor("customerId", CreateOrderRequest::customerId)` — назву поля передаємо явно, бо лямбда Java її не знає |
+| `.NotEmpty()`, `.NotNull()`, `.MinimumLength()`, `.MaximumLength()`, `.GreaterThan()`, `.LessThanOrEqualTo()`, `.InclusiveBetween()`, `.NotEqual()` | ті самі методи з малої літери |
+| `.Must(...)`, `.When(...)`, `.WithMessage(...)` | `.must(...)`, `.when(...)`, `.withMessage(...)` |
+| `ValidationResult`, `ValidationFailure`, `ValidationException` | ті самі назви |
+| `AddValidatorsFromAssemblyContaining<T>()` | `ValidationServices.addValidators(services, ...)` — явний перелік; тип моделі визначається з `extends AbstractValidator<T>` |
+| `AddFluentValidationAutoValidation()` | `AutoValidation` + `router.useModelValidation(...)` |
+| `ValidationProblemDetails` (400) | `ValidationProblemDetails` (400) |
+
+### Валідатори
+
+```java
+public final class CreateOrderRequestValidator extends AbstractValidator<CreateOrderRequest> {
+    public CreateOrderRequestValidator() {
+        ruleFor("customerId", CreateOrderRequest::customerId)
+                .notNull().withMessage("Потрібно вказати покупця (customerId).")
+                .notEqual(EMPTY).withMessage("Ідентифікатор покупця не може бути порожнім (з самих нулів).");
+    }
+}
+```
+
+| Валідатор | Синтаксичні правила | Семантичні правила (з доступом до даних) |
+|---|---|---|
+| `CreateOrderRequestValidator` | `customerId` вказано і не `00000000-…` | — |
+| `AddOrderItemRequestValidator(ProductCatalog)` | `productId` вказано; `quantity` > 0 | товар існує в каталозі |
+| `CreateProductRequestValidator(ProductRepository)` | назва непорожня, ≤ 120 символів; опис ≤ 1000; ціна вказана, > 0, ≤ 1 000 000, ≤ 2 знаки після коми | назва унікальна в каталозі (без урахування регістру і пробілів по краях) |
+
+Валідатор збирає **всі** помилки моделі одразу (клієнт бачить, що виправити), а в межах одного поля зупиняється на першій
+(як `CascadeMode.Stop`): для порожньої назви не показується ще й «така назва вже є».
+
+### Синтаксична валідація, семантична валідація та інваріанти Domain
+
+| Рівень | Що перевіряє | Де |
+|---|---|---|
+| Формат запиту | JSON коректний, поле має правильний тип, UUID канонічний | `Request` (model binding) → `BadRequestException` 400 |
+| Синтаксична валідація | обов'язковість, довжина, діапазони | валідатори DTO в Application |
+| Семантична валідація | правила, що потребують даних: унікальність назви, існування товару | валідатори DTO, залежності через конструктор (DI, Scoped) |
+| Інваріанти Domain | правила агрегату: не більше 99 одиниць товару в замовленні (з урахуванням уже доданих), не змінювати оформлене замовлення | `Order`, `Quantity`, `Money`... → `DomainRuleException` 400 |
+
+Domain свої перевірки зберіг: валідація — це «фільтр на вході» з дружніми повідомленнями, а інваріанти — гарантія
+коректності моделі, хоч би звідки її викликали (наприклад, початкове заповнення каталогу або `Checks` викликають сервіси напряму).
+Верхню межу кількості валідатор свідомо не дублює: вона залежить від того, що вже лежить у замовленні, тобто є інваріантом агрегату.
+
+### Автоматична перевірка до use-case
+
+```text
+POST /products  →  Router
+   1. binder:          ProductEndpoints.bindCreate(req)    JSON → CreateProductRequest (лише формат)
+   2. AutoValidation:  CreateProductRequestValidator       з області запиту (Scoped); помилки → ValidationException
+   3. ендпоінт:        ProductEndpoints.create(req, body)  → CatalogUseCases.create(body) → Domain → saveChanges
+ValidationException → ErrorMapper → 400 ValidationProblemDetails (ендпоінт і use-case не виконувались)
+```
+
+```java
+// InternetShopApp — аналог AddValidatorsFromAssemblyContaining + AddFluentValidationAutoValidation
+ValidationServices.addValidators(services,
+        CreateOrderRequestValidator.class, AddOrderItemRequestValidator.class, CreateProductRequestValidator.class);
+...
+new ErrorMapper().map(ValidationException.class, 400, ValidationProblemDetails::from) ...
+new Router(...).useModelValidation(s.get(AutoValidation.class))
+```
+
+Ендпоінти перевірок не містять (це перевіряє `Checks`): вони лише описують, як прочитати DTO з JSON, і викликають use-case.
+`Router` про конкретні валідатори не знає — лише про абстракцію `Router.ModelValidator`; новий валідатор = новий клас + рядок реєстрації.
+
+Приклад відповіді:
+
+```json
+{"title":"Вхідні дані не пройшли перевірку.","status":400,
+ "error":"Назва товару обов'язкова. Ціна може містити не більше двох знаків після коми.",
+ "errors":{"name":["Назва товару обов'язкова."],"price":["Ціна може містити не більше двох знаків після коми."]}}
+```
+
+Зміна поведінки API: товар, якого немає в каталозі, при додаванні в замовлення тепер дає **400** від валідатора
+(раніше 404 від сервісу; перевірка в `OrderService` лишилась як захист для прямих викликів).
+
+### Перевірки ПР8 (`Checks.validation` + HTTP)
+
+Коректна команда проходить; відсутній / нульовий `customerId` відхиляється з помилкою саме для поля `customerId`;
+усі некоректні поля повертаються разом, по одній помилці на поле; межі ціни; унікальність назви й існування товару
+(семантичні, з доступом до даних); верхня межа кількості лишається інваріантом Domain; `validateAndThrow` несе всі помилки;
+валідатори Scoped, для кожного вхідного DTO є валідатор, `AutoValidation` бере його з області запиту; валідатори в Application;
+ендпоінти не містять перевірок. Через HTTP: 400 зі структурованими `errors`, значення клієнта не повертаються,
+некоректний запит нічого не зберігає, дубль назви, `POST /orders` без `customerId`, неіснуючий товар + кількість 0 разом.
+
 ## Запуск
 
 Потрібен **JDK 21** або новіший і **Maven 3.9+** (у IntelliJ IDEA Maven вбудований).
@@ -595,7 +708,7 @@ check(orderService.contains("events.publish(") && savedFirst,
 ### Командний рядок (Maven)
 
 ```powershell
-mvn verify                                         # збірка всіх модулів + 136 перевірок
+mvn verify                                         # збірка всіх модулів + 158 перевірок
 mvn package                                        # збірка; виконуваний jar: internetshop-webapi/target/internetshop.jar
 java -jar internetshop-webapi/target/internetshop.jar   # запуск на http://localhost:8080 (дані в ./data)
 ```
@@ -611,7 +724,9 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
 Якщо PowerShell блокує скрипти: `powershell -ExecutionPolicy Bypass -File .\run.ps1`.
 
 `demo.ps1` створює замовлення й по кроках показує: відмову оформити порожнє замовлення, додавання товару з даними з Catalog,
-перевищення кількості 99, неіснуючий товар (404), оформлення, заборону змінювати оформлене замовлення та видалення товару з каталогу (204, потім 404).
+перевищення кількості 99, неіснуючий товар і кількість 0 (валідація, 400 з обома помилками), оформлення, заборону змінювати
+оформлене замовлення, видалення товару з каталогу (204, потім 404), а також (ПР8) структуровану відповідь 400 для некоректного
+товару і відмову створити товар з назвою, що вже є в каталозі.
 
 ### Перевірки
 
@@ -646,6 +761,9 @@ java -jar internetshop-webapi/target/internetshop.jar   # запуск на http
 - **Архітектурний стиль (ПР7):** одна точка входу (моноліт), Maven-модулі залежать лише «всередину» (модульність),
   Ordering і Catalog стикаються лише в `CatalogProductAdapter` і точці складання (точка майбутнього розділення),
   `OrderService` публікує події лише після `saveChanges()` (узгодженість).
+- **Валідація (ПР8):** правила `CreateOrderRequestValidator`, `AddOrderItemRequestValidator`, `CreateProductRequestValidator`
+  (синтаксичні та семантичні з доступом до даних), збирання всіх помилок, реєстрація в DI (Scoped) і автоматичний запуск,
+  відсутність перевірок в ендпоінтах; через HTTP — структурована відповідь 400 без значень клієнта, нічого не зберігається.
 - **HTTP:** запуск сервера на вільному порту та перевірка статусів 200/201/204/400/404/405/413/415; `GET /notifications` і `GET /statistics`.
 
 ## Структура проєкту
@@ -661,12 +779,15 @@ InternetShop/
 ├── internetshop-application/       pom.xml (-> domain)
 │   └── src/main/java/com/internetshop/application/
 │       ├── shared/        NotFoundException, ConcurrentChangeException, TimeProvider (ПР3), UnitOfWork (ПР5)
-│       │   └── events/    Event, EventBus, EventHandler                 (ПР2)
+│       │   ├── events/    Event, EventBus, EventHandler                 (ПР2)
+│       │   └── validation/ Validator, AbstractValidator, RuleBuilder, ValidationResult, ValidationFailure, ValidationException (ПР8)
 │       ├── catalog/       CatalogService, CatalogUseCases (ПР4), ProductQueries, ProductMapper + ProductDtoMapper (ПР4), ProductRepository (ПР5), ...
-│       │   └── dto/       ProductDto, CreateProductRequest, CreatedProductDto   (ПР6)
+│       │   ├── dto/       ProductDto, CreateProductRequest, CreatedProductDto   (ПР6)
+│       │   └── validation/ CreateProductRequestValidator                (ПР8)
 │       ├── ordering/      OrderService, OrderUseCases (ПР4), OrderMapper + OrderDtoMapper (ПР4), OrderRepository (ПР5), ProductCatalog, CatalogProduct, ...
 │       │   ├── dto/       CreateOrderRequest, AddOrderItemRequest, CreatedOrderDto, OrderDetailsDto, OrderLineDto, PlacedOrderDto (ПР6)
-│       │   └── events/    OrderCreated, OrderPlaced                     (ПР2)
+│       │   ├── events/    OrderCreated, OrderPlaced                     (ПР2)
+│       │   └── validation/ CreateOrderRequestValidator, AddOrderItemRequestValidator (ПР8)
 │       ├── notifications/ OrderPlacedNotificationHandler, Notification, NotificationSender, NotificationFeed
 │       └── analytics/     OrderCreatedStatisticsHandler, OrderPlacedStatisticsHandler, SalesStatistics (ПР2), SalesReport (ПР4)
 ├── internetshop-infrastructure/    pom.xml (-> application, domain)
@@ -678,7 +799,8 @@ InternetShop/
 │       └── time/          SystemTimeProvider                           (ПР3)
 ├── internetshop-webapi/            pom.xml (-> application, infrastructure, domain; збирає internetshop.jar)
 │   ├── src/main/java/com/internetshop/webapi/   Main, InternetShopApp, http/ (Router, ErrorMapper, HttpResponses, ...), endpoints/
-│   │   └── di/                                  ServiceCollection, ServiceProvider, ServiceScope, Lifetime, ... (ПР4)
+│   │   ├── di/                                  ServiceCollection, ServiceProvider, ServiceScope, Lifetime, ... (ПР4)
+│   │   └── validation/                          ValidationServices, AutoValidation, ValidationProblemDetails (ПР8)
 │   └── src/main/resources/static/               index.html, app.js, styles.css
 ├── internetshop-checks/            pom.xml (-> усі модулі; запуск на mvn verify)
 │   └── src/main/java/com/internetshop/checks/Checks.java
@@ -721,11 +843,15 @@ InternetShop/
 | ПР6: `CreateOrderCommand` у `Create(CreateOrderCommand command, ...)` | `CreateOrderRequest`, `AddOrderItemRequest`, `CreateProductRequest` |
 | ПР6: `return Ok(result); // повертаємо DTO` | `return Response.ok(orders.place(id));` — `Json` серіалізує DTO-запис |
 | ПР6: мапінг вручну / AutoMapper | Ручний мапінг у `OrderDtoMapper` / `ProductDtoMapper` (без сторонніх бібліотек) |
+| ПР8: пакет FluentValidation, `AbstractValidator<CreateOrderCommand>` | Власний аналог у `application/shared/validation`; `CreateOrderRequestValidator extends AbstractValidator<CreateOrderRequest>` |
+| ПР8: `AddValidatorsFromAssemblyContaining`, `AddFluentValidationAutoValidation` | `ValidationServices.addValidators(...)`, `AutoValidation` у конвеєрі `Router` |
+| ПР8: `ValidationProblemDetails` | `ValidationProblemDetails` через правило `ErrorMapper` |
 
 ## Результат
 
 Застосунок збирається Maven (`mvn verify`), запускається локально і доступний на <http://localhost:8080>. Сторінка показує каталог і замовлення
 та дозволяє пройти сценарії: успішні дії й відмови за бізнес-правилами, а в розділі «Реакції на події» показує результат
 роботи обробників подій (ПР2). Після рефакторингу за SOLID (ПР3), переходу на DI-контейнер (ПР4), на Repository + Unit of Work (ПР5) і на DTO для кожної операції (ПР6) поведінка не змінилася. У ПР7 стиль застосунку проаналізовано як модульний моноліт,
-а висновки закріплено фітнес-функціями. Усі 136 перевірок проходять.
+а висновки закріплено фітнес-функціями. У ПР8 додано декларативну валідацію вхідних DTO, яка автоматично виконується
+до use-case і повертає структуровані помилки. Усі 158 перевірок проходять.
 Структура з шарами та bounded contexts готова до поступового розширення в наступних роботах.

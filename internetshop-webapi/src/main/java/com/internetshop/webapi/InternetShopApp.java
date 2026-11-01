@@ -11,6 +11,7 @@ import com.internetshop.application.catalog.ProductMapper;
 import com.internetshop.application.catalog.ProductQueries;
 import com.internetshop.application.catalog.ProductRepository;
 import com.internetshop.application.catalog.dto.CreateProductRequest;
+import com.internetshop.application.catalog.validation.CreateProductRequestValidator;
 import com.internetshop.application.notifications.NotificationFeed;
 import com.internetshop.application.notifications.NotificationSender;
 import com.internetshop.application.notifications.OrderPlacedNotificationHandler;
@@ -22,11 +23,14 @@ import com.internetshop.application.ordering.OrderUseCases;
 import com.internetshop.application.ordering.ProductCatalog;
 import com.internetshop.application.ordering.events.OrderCreated;
 import com.internetshop.application.ordering.events.OrderPlaced;
+import com.internetshop.application.ordering.validation.AddOrderItemRequestValidator;
+import com.internetshop.application.ordering.validation.CreateOrderRequestValidator;
 import com.internetshop.application.shared.ConcurrentChangeException;
 import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
+import com.internetshop.application.shared.validation.ValidationException;
 import com.internetshop.domain.shared.DomainRuleException;
 import com.internetshop.infrastructure.events.InProcessEventBus;
 import com.internetshop.infrastructure.integration.CatalogProductAdapter;
@@ -46,6 +50,9 @@ import com.internetshop.webapi.endpoints.ProductEndpoints;
 import com.internetshop.webapi.endpoints.StatisticsEndpoints;
 import com.internetshop.webapi.http.ErrorMapper;
 import com.internetshop.webapi.http.Router;
+import com.internetshop.webapi.validation.AutoValidation;
+import com.internetshop.webapi.validation.ValidationProblemDetails;
+import com.internetshop.webapi.validation.ValidationServices;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -69,6 +76,9 @@ import java.util.concurrent.Executors;
  * <p>
  * ПР6 (DTO): реєстрація не змінилась — мапери (тепер з мапінгом в обидва боки й окремими DTO
  * для кожної операції) так само Transient. Навіть початкові дані каталогу створюються через CreateProductRequest.
+ * <p>
+ * ПР8 (валідація): тут реєструються валідатори DTO і вмикається їхній автоматичний запуск у Router,
+ * а ErrorMapper отримує правило ValidationException → 400 зі структурованою відповіддю.
  */
 public final class InternetShopApp {
 
@@ -122,15 +132,27 @@ public final class InternetShopApp {
         services.addTransient(OrderMapper.class, OrderDtoMapper.class);
         services.addTransient(ProductMapper.class, ProductDtoMapper.class);
 
+        // ---- ПР8: валідація (FluentValidation) ----
+        // Аналог AddValidatorsFromAssemblyContaining<...>() + AddFluentValidationAutoValidation():
+        // валідатори реєструються як Scoped (можуть залежати від репозиторіїв запиту), а AutoValidation
+        // запускає потрібний валідатор для кожного DTO з тіла запиту ще до виконання use-case.
+        ValidationServices.addValidators(services,
+                CreateOrderRequestValidator.class,
+                AddOrderItemRequestValidator.class,
+                CreateProductRequestValidator.class);
+
         // ---- HTTP ----
         // OCP: правила «виняток → HTTP-статус» задаються тут; новий тип помилки не вимагає змін у Router.
         // Правило для базового типу діє і для підтипів (ProductNotFoundException, OrderNotFoundException).
+        // ПР8: помилка валідації → 400 зі структурованим тілом (помилки згруповані за полями запиту).
         services.addSingleton(ErrorMapper.class, s -> new ErrorMapper()
+                .map(ValidationException.class, 400, ValidationProblemDetails::from)
                 .map(DomainRuleException.class, 400)
                 .map(NotFoundException.class, 404)
                 .map(ConcurrentChangeException.class, 409));
         services.addSingleton(Router.class, s -> {
             Router router = new Router(s.get(ErrorMapper.class), s.get(ServiceScopeFactory.class))
+                    .useModelValidation(s.get(AutoValidation.class))
                     .staticFile("/", "index.html")
                     .staticFile("/app.js", "app.js")
                     .staticFile("/styles.css", "styles.css");

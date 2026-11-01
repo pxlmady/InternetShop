@@ -30,6 +30,12 @@ import java.util.regex.Pattern;
  * ServiceScopeFactory і отримує з неї клас-ендпоінт разом з усіма його залежностями (аналог активації
  * контролерів в ASP.NET Core). Тому Scoped-залежності живуть рівно один запит, а ендпоінти й сервіси
  * не знають про контейнер — вони лише отримують абстракції через конструктор.
+ * <p>
+ * ПР8 (валідація): для маршрутів з тілом запиту конвеєр має три кроки, як в ASP.NET Core з FluentValidation:
+ * 1) model binding — JSON перетворюється на DTO (тут лише перевірка формату: тип поля, коректний UUID);
+ * 2) автоматична валідація DTO (ModelValidator, у точці складання — AutoValidation) ще до виклику ендпоінта;
+ * 3) ендпоінт викликає use-case вже з перевіреною моделлю.
+ * Router про конкретні валідатори не знає — лише про абстракцію ModelValidator.
  */
 public final class Router implements HttpHandler {
 
@@ -47,12 +53,26 @@ public final class Router implements HttpHandler {
         Response handle(ServiceScope scope, Request request);
     }
 
+    /** ПР8: ендпоінт з уже прочитаною і перевіреною моделлю тіла запиту (аналог дії контролера з [FromBody]). */
+    @FunctionalInterface
+    public interface BodyAction<E, B> {
+        Response handle(E endpoint, Request request, B body);
+    }
+
+    /** ПР8: автоматична перевірка вхідної моделі перед виконанням ендпоінта (реалізація — у точці складання). */
+    @FunctionalInterface
+    public interface ModelValidator {
+        /** Кидає виняток, якщо модель некоректна; валідатори беруться з області поточного запиту. */
+        void validate(ServiceScope scope, Object model);
+    }
+
     private record Route(String method, Pattern pattern, List<String> params, Handler handler) { }
 
     private final List<Route> routes = new ArrayList<>();
     private final Map<String, String> staticFiles = new HashMap<>();
     private final ErrorMapper errors;
     private final ServiceScopeFactory scopes;
+    private ModelValidator modelValidator = (scope, model) -> { };
 
     public Router(ErrorMapper errors, ServiceScopeFactory scopes) {
         this.errors = Objects.requireNonNull(errors);
@@ -67,6 +87,28 @@ public final class Router implements HttpHandler {
         Objects.requireNonNull(endpoint);
         Objects.requireNonNull(action);
         return add(method, template, (scope, request) -> action.apply(scope.get(endpoint), request));
+    }
+
+    /**
+     * ПР8: маршрут з тілом запиту. binder читає JSON у DTO (model binding), потім модель автоматично
+     * перевіряється ModelValidator-ом і лише після цього створюється ендпоінт і виконується use-case.
+     */
+    public <E, B> Router route(String method, String template, Class<E> endpoint,
+                               Function<Request, B> binder, BodyAction<E, B> action) {
+        Objects.requireNonNull(endpoint);
+        Objects.requireNonNull(binder);
+        Objects.requireNonNull(action);
+        return add(method, template, (scope, request) -> {
+            B body = binder.apply(request);       // 1. JSON → DTO (помилки формату → 400)
+            modelValidator.validate(scope, body); // 2. автоматична валідація до use-case
+            return action.handle(scope.get(endpoint), request, body); // 3. ендпоінт → use-case
+        });
+    }
+
+    /** ПР8: підключає автоматичну валідацію моделей (аналог AddFluentValidationAutoValidation). */
+    public Router useModelValidation(ModelValidator validator) {
+        this.modelValidator = Objects.requireNonNull(validator);
+        return this;
     }
 
     /** Простий маршрут без залежностей. */
@@ -133,7 +175,9 @@ public final class Router implements HttpHandler {
             } catch (RuntimeException e) {
                 OptionalInt status = errors.statusFor(e);
                 if (status.isPresent()) {
-                    HttpResponses.error(exchange, status.getAsInt(), e.getMessage());
+                    // Тіло відповіді теж задає правило ErrorMapper: за замовчуванням {"error": "..."},
+                    // для помилок валідації (ПР8) — структурована відповідь з помилками за полями.
+                    HttpResponses.json(exchange, status.getAsInt(), errors.bodyFor(e));
                 } else {
                     // Подробиці помилки лише в лог сервера; клієнт не отримує стек та внутрішні дані.
                     LOG.log(Level.SEVERE, "Unhandled error for " + method + " " + path, e);

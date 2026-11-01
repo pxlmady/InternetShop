@@ -40,6 +40,13 @@ import com.internetshop.application.shared.NotFoundException;
 import com.internetshop.application.shared.TimeProvider;
 import com.internetshop.application.shared.UnitOfWork;
 import com.internetshop.application.shared.events.EventBus;
+import com.internetshop.application.shared.validation.AbstractValidator;
+import com.internetshop.application.shared.validation.ValidationException;
+import com.internetshop.application.shared.validation.ValidationFailure;
+import com.internetshop.application.shared.validation.ValidationResult;
+import com.internetshop.application.catalog.validation.CreateProductRequestValidator;
+import com.internetshop.application.ordering.validation.AddOrderItemRequestValidator;
+import com.internetshop.application.ordering.validation.CreateOrderRequestValidator;
 import com.internetshop.domain.catalog.Product;
 import com.internetshop.domain.catalog.ProductName;
 import com.internetshop.domain.ordering.CustomerId;
@@ -69,6 +76,7 @@ import com.internetshop.webapi.endpoints.StatisticsEndpoints;
 import com.internetshop.webapi.http.ErrorMapper;
 import com.internetshop.webapi.http.Json;
 import com.internetshop.webapi.http.Router;
+import com.internetshop.webapi.validation.AutoValidation;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -103,7 +111,8 @@ import java.util.stream.Stream;
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
  * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> Repository і Unit of Work (ПР5) ->
- * DTO і мапінг (ПР6) -> межі шарів і контекстів -> архітектурний стиль «модульний моноліт» (ПР7) -> HTTP.
+ * DTO і мапінг (ПР6) -> валідація вхідних даних (ПР8) -> межі шарів і контекстів -> архітектурний стиль
+ * «модульний моноліт» (ПР7) -> HTTP.
  * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
  */
@@ -141,6 +150,7 @@ public final class Checks {
             dependencyInjection(tmp.resolve("di"));
             repositoryAndUnitOfWork(tmp.resolve("uow"));
             dataTransferObjects(tmp.resolve("dto"));
+            validation(tmp.resolve("validation"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
             architecturalStyle(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
@@ -731,6 +741,84 @@ public final class Checks {
                 "Order scenario works end to end with request and result DTO");
     }
 
+    // ---------------- ПР8: валідація вхідних даних (аналог FluentValidation) ----------------
+
+    private static void validation(Path dir) {
+        FileDataContext db = new FileDataContext(dir);
+        CatalogService catalog = catalogService(db);
+        UUID mouseId = catalog.create(new CreateProductRequest("Бездротова миша", "", new BigDecimal("649.50"))).id();
+        FileUnitOfWork unitOfWork = new FileUnitOfWork(db);
+        ProductRepository products = new FileProductRepository(db, unitOfWork);
+
+        // Синтаксична валідація CreateOrderRequest (наш CreateOrderCommand).
+        CreateOrderRequestValidator orderValidator = new CreateOrderRequestValidator();
+        check(orderValidator.validate(new CreateOrderRequest(UUID.randomUUID())).isValid(),
+                "Validation: correct CreateOrderRequest passes");
+        ValidationResult noCustomer = orderValidator.validate(new CreateOrderRequest(null));
+        check(!noCustomer.isValid() && noCustomer.errors().get(0).propertyName().equals("customerId")
+                        && noCustomer.errors().get(0).errorMessage().contains("покупця"),
+                "Validation: missing customerId -> error for field customerId with a clear message");
+        check(!orderValidator.validate(new CreateOrderRequest(new UUID(0, 0))).isValid(),
+                "Validation: all-zero customerId rejected before the use case");
+
+        // Усі помилки повертаються разом; у межах одного поля — лише перша (CascadeMode.Stop).
+        CreateProductRequestValidator productValidator = new CreateProductRequestValidator(products);
+        ValidationResult many = productValidator.validate(new CreateProductRequest(" ", "x".repeat(1001), null));
+        check(many.errors().size() == 3 && many.errors().stream().map(ValidationFailure::propertyName).toList()
+                        .equals(List.of("name", "description", "price")),
+                "Validation: all invalid fields reported at once (name, description, price)");
+        check(many.errors().stream().filter(f -> f.propertyName().equals("name")).count() == 1,
+                "Validation: one error per field (blank name is not also checked for uniqueness)");
+        check(!productValidator.validate(new CreateProductRequest("Кабель", "", new BigDecimal("-5"))).isValid()
+                        && !productValidator.validate(new CreateProductRequest("Кабель", "", new BigDecimal("1000000.01"))).isValid()
+                        && !productValidator.validate(new CreateProductRequest("Кабель", "", new BigDecimal("1.999"))).isValid()
+                        && productValidator.validate(new CreateProductRequest("Кабель", "", new BigDecimal("1000000"))).isValid(),
+                "Validation: price must be positive, at most 1 000 000 and have at most 2 decimals");
+
+        // Семантична валідація з доступом до даних: унікальна назва товару, існування товару в каталозі.
+        ValidationResult duplicate = productValidator.validate(new CreateProductRequest("  бездротова МИША ", "", BigDecimal.TEN));
+        check(!duplicate.isValid() && duplicate.errors().get(0).errorMessage().contains("вже є"),
+                "Semantic validation (data access): product name must be unique in the catalog");
+        AddOrderItemRequestValidator itemValidator = new AddOrderItemRequestValidator(new CatalogProductAdapter(catalog));
+        check(itemValidator.validate(new AddOrderItemRequest(mouseId, 2)).isValid()
+                        && !itemValidator.validate(new AddOrderItemRequest(UUID.randomUUID(), 1)).isValid(),
+                "Semantic validation (data access): product must exist in the catalog");
+        ValidationResult zero = itemValidator.validate(new AddOrderItemRequest(mouseId, 0));
+        check(!zero.isValid() && zero.errors().get(0).propertyName().equals("quantity"),
+                "Validation: quantity must be positive");
+        check(itemValidator.validate(new AddOrderItemRequest(mouseId, 100)).isValid(),
+                "Validation checks format only: the 1..99 limit stays a domain invariant of Order");
+
+        // validateAndThrow: виняток несе всі помилки.
+        try {
+            productValidator.validateAndThrow(new CreateProductRequest("", "", null));
+            throw new AssertionError("FAIL: invalid request accepted by validateAndThrow");
+        } catch (ValidationException e) {
+            check(e.errors().size() == 2, "validateAndThrow raises ValidationException with every failure");
+        }
+
+        // Реєстрація в DI: валідатори Scoped, для кожного вхідного DTO є валідатор.
+        ServiceProvider services = InternetShopApp.configureServices(dir.resolve("di"));
+        AutoValidation auto = services.get(AutoValidation.class);
+        check(services.lifetimeOf(CreateOrderRequestValidator.class) == Lifetime.SCOPED
+                        && services.lifetimeOf(AddOrderItemRequestValidator.class) == Lifetime.SCOPED
+                        && services.lifetimeOf(CreateProductRequestValidator.class) == Lifetime.SCOPED,
+                "DI: validators registered as Scoped (they may use request-scoped repositories)");
+        check(auto.hasValidatorFor(CreateOrderRequest.class) && auto.hasValidatorFor(AddOrderItemRequest.class)
+                        && auto.hasValidatorFor(CreateProductRequest.class),
+                "Auto validation knows a validator for every request DTO");
+        try (ServiceScope scope = services.createScope()) {
+            expect(ValidationException.class, () -> auto.validate(scope, new CreateOrderRequest(null)),
+                    "Auto validation resolves the validator from the request scope and rejects the model");
+        }
+
+        // Валідатори в Application, без залежностей від WebApi; DTO лишаються простими даними.
+        check(Stream.of(CreateOrderRequestValidator.class, AddOrderItemRequestValidator.class, CreateProductRequestValidator.class)
+                        .allMatch(c -> c.getPackageName().startsWith("com.internetshop.application")
+                                && c.getSuperclass() == AbstractValidator.class),
+                "Validators live in the Application layer and extend AbstractValidator<T>");
+    }
+
     /** Читання «після перезапуску»: новий контекст даних над тими самими файлами. */
     private static ProductRepository productsAfterRestart(Path dir) {
         FileDataContext db = new FileDataContext(dir);
@@ -814,6 +902,11 @@ public final class Checks {
         dtoImports.addAll(importsOf(application.resolve("com/internetshop/application/catalog/dto")));
         check(dtoImports.stream().allMatch(i -> i.startsWith("java.")),
                 "DTO: DTO packages depend only on the JDK (no domain classes inside)");
+
+        // ПР8: перевірки не в контролерах — ендпоінти не валідують і не кидають винятків самі.
+        check(importsOf(webapi.resolve("endpoints")).stream().noneMatch(i -> i.contains(".validation."))
+                        && sourcesOf(webapi.resolve("endpoints")).stream().noneMatch(src -> src.contains("throw new")),
+                "Validation: endpoints contain no validation logic (validators run automatically before them)");
     }
 
     // ---------------- ПР7: архітектурний стиль — модульний моноліт ----------------
@@ -928,7 +1021,29 @@ public final class Checks {
 
             HttpResponse<String> tooMany = send(client, "POST", base + "/orders/" + orderId + "/items", "application/json",
                     "{\"productId\":\"" + productId + "\",\"quantity\":100}");
-            check(tooMany.statusCode() == 400 && tooMany.body().contains("від 1 до 99"), "Business rule violation -> 400 with message");
+            check(tooMany.statusCode() == 400 && tooMany.body().contains("від 1 до 99") && !tooMany.body().contains("\"errors\""),
+                    "Domain invariant violation (passes validation) -> 400 with the domain message");
+
+            // ПР8: автоматична валідація до use-case, структурована відповідь з помилками за полями.
+            HttpResponse<String> badProduct = send(client, "POST", base + "/products", "application/json",
+                    "{\"name\":\" \",\"description\":\"\",\"price\":12.345}");
+            check(badProduct.statusCode() == 400 && badProduct.body().contains("\"title\":\"Вхідні дані не пройшли перевірку.\"")
+                            && badProduct.body().contains("\"errors\":{\"name\":[") && badProduct.body().contains("\"price\":["),
+                    "Validation error -> 400 with structured errors grouped by field");
+            check(!badProduct.body().contains("12.345"), "Validation response does not echo submitted values");
+            check(!send(client, "GET", base + "/products", null, null).body().contains("\"name\":\" \""),
+                    "Invalid request never reaches the use case (nothing saved)");
+            HttpResponse<String> duplicate = send(client, "POST", base + "/products", "application/json",
+                    "{\"name\":\"бездротова миша\",\"description\":\"\",\"price\":10}");
+            check(duplicate.statusCode() == 400 && duplicate.body().contains("вже є"),
+                    "Semantic validation over HTTP: duplicate product name -> 400");
+            HttpResponse<String> noCustomer = send(client, "POST", base + "/orders", "application/json", "{}");
+            check(noCustomer.statusCode() == 400 && noCustomer.body().contains("\"customerId\":["),
+                    "POST /orders without customerId -> 400 from CreateOrderRequestValidator");
+            HttpResponse<String> badItem = send(client, "POST", base + "/orders/" + orderId + "/items", "application/json",
+                    "{\"productId\":\"" + UUID.randomUUID() + "\",\"quantity\":0}");
+            check(badItem.statusCode() == 400 && badItem.body().contains("немає в каталозі") && badItem.body().contains("\"quantity\":["),
+                    "Unknown product and zero quantity reported together -> 400");
 
             HttpResponse<String> added = send(client, "POST", base + "/orders/" + orderId + "/items", "application/json",
                     "{\"productId\":\"" + productId + "\",\"quantity\":2}");

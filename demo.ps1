@@ -35,8 +35,8 @@ Next-Step
 Write-Host '5. Додаємо ще 98 шт. того самого товару: разом 100 > 99, очікуємо HTTP 400'
 Send-Demo "/orders/$($order.id)/items" @{ productId = $product.id; quantity = 98 }
 Next-Step
-Write-Host '6. Неіснуючий товар: очікуємо HTTP 404'
-Send-Demo "/orders/$($order.id)/items" @{ productId = [guid]::NewGuid().ToString(); quantity = 1 }
+Write-Host '6. Неіснуючий товар і кількість 0: AddOrderItemRequestValidator (ПР8) повертає обидві помилки, HTTP 400'
+Send-Demo "/orders/$($order.id)/items" @{ productId = [guid]::NewGuid().ToString(); quantity = 0 }
 Next-Step
 Write-Host '7. Оформлюємо замовлення: OrderService публікує подію OrderPlaced'
 Send-Demo "/orders/$($order.id)/place" @{}
@@ -64,3 +64,15 @@ catch {
     try { $message = ($message | ConvertFrom-Json).error } catch { }
     Write-Host "HTTP $([int]$_.Exception.Response.StatusCode): $message"
 }
+Next-Step
+Write-Host '12. ПР8: некоректний товар (порожня назва, ціна з трьома знаками після коми) — структурована відповідь 400'
+try {
+    Invoke-RestMethod -Uri "$BaseUrl/products" -Method Post -ContentType 'application/json; charset=utf-8' `
+        -Body ([System.Text.Encoding]::UTF8.GetBytes((@{ name = ' '; description = ''; price = 12.345 } | ConvertTo-Json))) | Out-Null
+} catch {
+    Write-Host "HTTP $([int]$_.Exception.Response.StatusCode):"
+    $_.ErrorDetails.Message | ConvertFrom-Json | ConvertTo-Json -Depth 5
+}
+Next-Step
+Write-Host '13. ПР8: товар з назвою, що вже є в каталозі (семантична перевірка з доступом до даних): HTTP 400'
+Send-Demo '/products' @{ name = $product.name; description = ''; price = 1 }
