@@ -103,7 +103,7 @@ import java.util.stream.Stream;
 /**
  * Консольні перевірки (аналог CourseDemo.Checks): Domain -> Application + Infrastructure ->
  * події та обробники (ПР2) -> принципи SOLID (ПР3) -> Dependency Injection (ПР4) -> Repository і Unit of Work (ПР5) ->
- * DTO і мапінг (ПР6) -> межі шарів і контекстів -> HTTP.
+ * DTO і мапінг (ПР6) -> межі шарів і контекстів -> архітектурний стиль «модульний моноліт» (ПР7) -> HTTP.
  * Використовують окрему тимчасову папку даних.
  * Запуск: mvn verify (або з кореня проєкту); при першій невдалій перевірці — виняток і помилка збірки.
  */
@@ -142,6 +142,7 @@ public final class Checks {
             repositoryAndUnitOfWork(tmp.resolve("uow"));
             dataTransferObjects(tmp.resolve("dto"));
             architecture(Path.of(args.length > 0 ? args[0] : "."));
+            architecturalStyle(Path.of(args.length > 0 ? args[0] : "."));
             http(tmp.resolve("http"));
         } finally {
             deleteRecursively(tmp);
@@ -813,6 +814,69 @@ public final class Checks {
         dtoImports.addAll(importsOf(application.resolve("com/internetshop/application/catalog/dto")));
         check(dtoImports.stream().allMatch(i -> i.startsWith("java.")),
                 "DTO: DTO packages depend only on the JDK (no domain classes inside)");
+    }
+
+    // ---------------- ПР7: архітектурний стиль — модульний моноліт ----------------
+
+    /**
+     * Фітнес-функції стилю: перевіряють ті властивості, на які спирається аналіз у ПР7.
+     * Якщо хтось почне «розмивати» модулі чи межу між контекстами, збірка впаде.
+     */
+    private static void architecturalStyle(Path root) throws IOException {
+        List<String> modules = List.of("internetshop-domain", "internetshop-application",
+                "internetshop-infrastructure", "internetshop-webapi");
+
+        // Моноліт: одна одиниця розгортання (виконуваний jar webapi) з однією точкою входу.
+        long entryPoints = 0;
+        for (String m : modules) {
+            entryPoints += sourcesOf(root.resolve(m + "/src/main/java")).stream()
+                    .filter(src -> src.contains("static void main(")).count();
+        }
+        check(entryPoints == 1, "Monolith: one deployable unit with a single entry point (webapi Main)");
+
+        // Модульність: Maven-модулі залежать лише «всередину», без циклів.
+        Map<String, Set<String>> allowed = Map.of(
+                "internetshop-domain", Set.of(),
+                "internetshop-application", Set.of("internetshop-domain"),
+                "internetshop-infrastructure", Set.of("internetshop-domain", "internetshop-application"),
+                "internetshop-webapi", Set.of("internetshop-domain", "internetshop-application", "internetshop-infrastructure"));
+        boolean inward = true;
+        for (String m : modules) {
+            String pom = Files.readString(root.resolve(m + "/pom.xml"));
+            String deps = pom.contains("<dependencies>") ? pom.substring(pom.indexOf("<dependencies>")) : "";
+            for (String internal : modules) {
+                if (deps.contains("<artifactId>" + internal + "</artifactId>") && !allowed.get(m).contains(internal)) inward = false;
+            }
+        }
+        check(inward, "Modular: Maven modules depend only inward (Domain <- Application <- Infrastructure <- WebApi)");
+
+        // Точка майбутнього розділення: Ordering і Catalog зустрічаються лише в адаптері (і в точці складання).
+        // Якщо Catalog стане окремим сервісом, адаптер заміниться HTTP-клієнтом, решта коду не зміниться.
+        List<String> crossing = new ArrayList<>();
+        for (String m : List.of("internetshop-application", "internetshop-infrastructure", "internetshop-webapi")) {
+            try (Stream<Path> files = Files.walk(root.resolve(m + "/src/main/java"))) {
+                for (Path f : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                    List<String> imports = Files.readAllLines(f).stream().map(String::trim).filter(l -> l.startsWith("import ")).toList();
+                    if (imports.stream().anyMatch(i -> i.contains(".catalog.")) && imports.stream().anyMatch(i -> i.contains(".ordering.")))
+                        crossing.add(f.getFileName().toString());
+                }
+            }
+        }
+        check(Set.copyOf(crossing).equals(Set.of("CatalogProductAdapter.java", "InternetShopApp.java")),
+                "Split point: Ordering reaches Catalog only through CatalogProductAdapter (wired in the composition root)");
+
+        // Узгодженість: подія публікується лише після збереження — у моноліті це одна локальна операція;
+        // у мікросервісах тут знадобився б Outbox, бо запис і відправлення стали б двома окремими кроками.
+        String orderService = Files.readString(root.resolve(
+                "internetshop-application/src/main/java/com/internetshop/application/ordering/OrderService.java"));
+        boolean savedFirst = true;
+        for (int at = orderService.indexOf("events.publish("); at >= 0; at = orderService.indexOf("events.publish(", at + 1)) {
+            int save = orderService.lastIndexOf("unitOfWork.saveChanges()", at);
+            int method = orderService.lastIndexOf("public ", at);
+            if (save < method) savedFirst = false;
+        }
+        check(orderService.contains("events.publish(") && savedFirst,
+                "Consistency: OrderService publishes events only after saveChanges() in the same method");
     }
 
     private static List<String> sourcesOf(Path dir) throws IOException {
